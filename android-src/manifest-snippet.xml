@@ -1,0 +1,12 @@
+<!-- In android/app/src/main/AndroidManifest.xml einfügen -->
+
+<!-- Direkt unter <manifest>: -->
+<uses-feature android:name="android.hardware.usb.host" android:required="true" />
+
+<!-- Innerhalb der MainActivity-<activity>: App beim Anstecken eines FC vorschlagen -->
+<intent-filter>
+    <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+</intent-filter>
+<meta-data
+    android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+    android:resource="@xml/device_filter" />

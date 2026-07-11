@@ -1,0 +1,3 @@
+[submodule "inav-configurator"]
+	path = inav-configurator
+	url = https://github.com/iNavFlight/inav-configurator.git
