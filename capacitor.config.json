@@ -1,0 +1,11 @@
+{
+  "appId": "org.inav.configurator.mobile",
+  "appName": "INAV Configurator",
+  "webDir": "dist-mobile",
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}
