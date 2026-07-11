@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Gängige Flight-Controller-USB-Chips: App wird beim Anstecken vorgeschlagen -->
+<resources>
+    <!-- STM32 Virtual COM Port (die meisten F4/F7/H7-FCs) -->
+    <usb-device vendor-id="1155" product-id="22336" />
+    <!-- Silicon Labs CP210x -->
+    <usb-device vendor-id="4292" product-id="60000" />
+    <!-- FTDI FT232 -->
+    <usb-device vendor-id="1027" product-id="24577" />
+    <!-- WCH CH340/CH341 -->
+    <usb-device vendor-id="6790" product-id="29987" />
+    <!-- Artery AT32 VCP -->
+    <usb-device vendor-id="11836" product-id="22336" />
+</resources>

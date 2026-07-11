@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">INAV Configurator</string>
+    <string name="title_activity_main">INAV Configurator</string>
+    <string name="package_name">org.inav.configurator.mobile</string>
+    <string name="custom_url_scheme">org.inav.configurator.mobile</string>
+</resources>
