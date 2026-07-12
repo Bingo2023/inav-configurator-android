@@ -92,13 +92,27 @@ public class UsbSerialPlugin extends Plugin implements SerialInputOutputManager.
         JSArray ports = new JSArray();
         for (UsbSerialDriver driver : drivers) {
             UsbDevice dev = driver.getDevice();
+            boolean hasPermission = usbManager.hasPermission(dev);
             JSObject o = new JSObject();
             o.put("path", "usb:" + dev.getDeviceId());
-            o.put("name", dev.getProductName() != null ? dev.getProductName() : driver.getClass().getSimpleName());
-            o.put("manufacturer", dev.getManufacturerName());
+            // Produkt-/Herstellername & Seriennummer werfen ab Android 10 eine
+            // SecurityException, solange keine USB-Berechtigung erteilt wurde —
+            // deshalb nur mit Berechtigung abfragen, sonst Fallback-Werte.
+            String name = driver.getClass().getSimpleName().replace("SerialDriver", "");
+            String manufacturer = null;
+            String serial = null;
+            if (hasPermission) {
+                try {
+                    if (dev.getProductName() != null) name = dev.getProductName();
+                    manufacturer = dev.getManufacturerName();
+                    serial = dev.getSerialNumber();
+                } catch (SecurityException ignored) { }
+            }
+            o.put("name", name);
+            o.put("manufacturer", manufacturer != null ? manufacturer : name);
             o.put("vendorId", dev.getVendorId());
             o.put("productId", dev.getProductId());
-            o.put("serialNumber", dev.getSerialNumber());
+            o.put("serialNumber", serial);
             ports.put(o);
         }
         JSObject result = new JSObject();

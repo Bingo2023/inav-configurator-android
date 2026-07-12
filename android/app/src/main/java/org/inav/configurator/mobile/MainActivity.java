@@ -19,5 +19,10 @@ public class MainActivity extends BridgeActivity {
         s.setSupportZoom(true);
         s.setBuiltInZoomControls(true);
         s.setDisplayZoomControls(false);
+
+        // Der Configurator parst die Electron-Version aus dem User-Agent
+        // (configurator_main.js: userAgent.match(/Electron\/.../)[1]) —
+        // ohne diesen Zusatz crasht der Tab-Aufbau mit "null[1]".
+        s.setUserAgentString(s.getUserAgentString() + " Electron/0.0.0-android");
     }
 }
