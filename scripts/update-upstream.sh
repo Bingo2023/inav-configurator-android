@@ -1,30 +1,46 @@
 #!/usr/bin/env bash
-# Upstream-Update in einem Schritt: ./scripts/update-upstream.sh <tag>
-# Beispiel: ./scripts/update-upstream.sh 9.1.0
+# Upstream-Update: ./scripts/update-upstream.sh <tag-oder-commit>
+# Beispiele: ./scripts/update-upstream.sh 9.1.0
+#            ./scripts/update-upstream.sh 19ba259   (INAV taggt nicht immer!)
 set -euo pipefail
 
-TAG="${1:?Usage: $0 <upstream-release-tag>  (z.B. 9.1.0)}"
+REF="${1:?Usage: $0 <upstream-tag-oder-commit>}"
 cd "$(dirname "$0")/.."
 
-echo "==> Hole Tags aus Upstream..."
+OLD_REF=$(git -C inav-configurator rev-parse HEAD)
+
+echo "==> Hole Upstream-Stände..."
 git -C inav-configurator fetch --tags origin
 
-echo "==> Checke Tag $TAG aus..."
-git -C inav-configurator checkout "$TAG"
+echo "==> Checke $REF aus (vorher: ${OLD_REF:0:9})..."
+git -C inav-configurator checkout "$REF"
 
 echo "==> Installiere Upstream-Dependencies..."
 (cd inav-configurator && (npm ci 2>/dev/null || npm install))
 
-echo "==> Prüfe auf neue Node-/Electron-Imports im Renderer (ggf. Shims/Aliase ergänzen):"
-grep -rn --include='*.js' --include='*.mjs' \
-  -e "from 'serialport'" -e 'require("serialport")' -e "require('serialport')" \
-  -e "from 'electron'" -e "require('electron')" \
-  inav-configurator/js 2>/dev/null | sed 's/^/    /' || echo "    (keine Treffer — gut)"
+echo ""
+echo "==> [PRÜFPUNKT 1] Änderungen an der Preload-Brücke & Serial-Schicht"
+echo "    (bei Treffern: shim/electron-api.js nachziehen!)"
+if git -C inav-configurator diff --quiet "$OLD_REF" HEAD -- js/main/preload.js js/main/serial.js js/port_handler.js; then
+  echo "    Keine Änderungen — Brücke bleibt kompatibel."
+else
+  git -C inav-configurator diff "$OLD_REF" HEAD -- js/main/preload.js js/main/serial.js js/port_handler.js | sed 's/^/    /'
+fi
 
-echo "==> Mobile-Build + Capacitor-Sync..."
+echo ""
+echo "==> [PRÜFPUNKT 2] Neue Node-/Electron-Imports im Renderer (ggf. Alias/Shim ergänzen):"
+grep -rn --include='*.js' --include='*.mjs' \
+  -e "from 'serialport'" -e "require('serialport')" \
+  -e "from 'electron'" -e "require('electron')" \
+  inav-configurator/js inav-configurator/tabs 2>/dev/null \
+  | grep -v "js/main/" | sed 's/^/    /' || echo "    (keine Treffer außerhalb von js/main/ — gut)"
+
+echo ""
+echo "==> [PRÜFPUNKT 3] Mobile-Build (auf '[upstream-patches] ... nicht gefunden'-Warnungen achten!)"
 npm run build:mobile
 npx cap sync android
 
-echo "==> Submodule-Pin committen:"
-echo "    git add inav-configurator && git commit -m 'chore: bump upstream to $TAG'"
-echo "==> Fertig. Jetzt in Android Studio bauen: npx cap open android"
+echo ""
+echo "==> Fertig. Nächste Schritte:"
+echo "    1. APK bauen & auf dem Gerät testen: cd android && ./gradlew assembleDebug"
+echo "    2. Submodule-Pin committen: git add inav-configurator && git commit -m 'chore: bump upstream to $REF'"

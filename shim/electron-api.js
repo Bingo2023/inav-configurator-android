@@ -91,39 +91,6 @@ if (!('usb' in navigator)) {
   }
 }
 
-/* ---------- TEMPORÄRES Debug-Overlay: zeigt unbehandelte Fehler auf dem Bildschirm ----------
-   (nach Abschluss der Fehlersuche wieder entfernen) */
-
-function showError(msg) {
-  try {
-    let el = document.getElementById('android-debug-overlay');
-    if (!el) {
-      el = document.createElement('div');
-      el.id = 'android-debug-overlay';
-      el.style.cssText = 'position:fixed;bottom:0;left:0;right:0;max-height:45%;overflow:auto;' +
-        'background:rgba(130,0,0,.93);color:#fff;font:12px/1.4 monospace;padding:8px;' +
-        'z-index:2147483647;white-space:pre-wrap;word-break:break-all;';
-      const btn = document.createElement('div');
-      btn.textContent = '[× Overlay schließen]';
-      btn.style.cssText = 'color:#ffo;color:#ff0;cursor:pointer;margin-bottom:4px;';
-      btn.onclick = () => el.remove();
-      el.appendChild(btn);
-      (document.body || document.documentElement).appendChild(el);
-    }
-    const line = document.createElement('div');
-    line.textContent = msg;
-    el.appendChild(line);
-  } catch { /* Overlay darf nie selbst crashen */ }
-}
-
-window.addEventListener('error', (e) => {
-  showError('ERROR: ' + (e.message || e.error) + '\n  @ ' + (e.filename || '?') + ':' + (e.lineno || '?'));
-});
-window.addEventListener('unhandledrejection', (e) => {
-  const r = e.reason;
-  showError('PROMISE: ' + (r && r.message ? r.message : String(r)) + (r && r.stack ? '\n' + String(r.stack).split('\n').slice(0, 3).join('\n') : ''));
-});
-
 /* ---------- Die Brücke ---------- */
 
 window.electronAPI = {
