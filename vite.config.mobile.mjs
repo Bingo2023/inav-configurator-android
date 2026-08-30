@@ -1,8 +1,13 @@
-// Mobile-Build des UNVERÄNDERTEN Upstream-Codes — Version 3.
+// Mobile-Build des UNVERÄNDERTEN Upstream-Codes — Version 4.
 //
 // v3: window.electronAPI-Brücke (shim/electron-api.js) wird als erstes Modul
 //     geladen; jQuery-Global über gebündeltes Pre-Script; App-Version aus dem
 //     Upstream-package.json als __INAV_VERSION__ eingebrannt.
+// v4: android-cli-Block — blendet auf Android nicht unterstützte Bedienelemente
+//     aus (CLI-Buttons, Firmware Flasher, SITL) und macht "In Datei speichern"
+//     zum Ein-Knopf-Backup (führt automatisch erst 'diff all' aus).
+// v5: "Einstellungen speichern" wieder sichtbar; nach "Aus Datei laden" wird
+//     automatisch 'save' gesendet (mit Fehlermeldung bei Zeitüberschreitung).
 //
 // PFLEGEHINWEIS bei Upstream-Updates:
 //   1. inav-configurator/js/main/preload.js diffen → shim/electron-api.js nachziehen
@@ -63,6 +68,125 @@ export default defineConfig({
           touched = true;
         }
         return touched ? out : null;
+      },
+    },
+    // Android-CLI: nicht unterstützte Bedienelemente ausblenden; "In Datei
+    // speichern" führt automatisch erst 'diff all' aus (Ein-Knopf-Backup).
+    {
+      name: 'android-cli',
+      transformIndexHtml() {
+        return [
+          {
+            tag: 'style',
+            children:
+              '.tab-cli .msc, .tab-cli .copy, .tab-cli .diffall, ' +
+              '#tabs .tab_firmware_flasher, #tabs .tab_sitl { display: none !important; }',
+            injectTo: 'head',
+          },
+        ];
+      },
+      transform(code, id) {
+        if (!id.replace(/\\/g, '/').endsWith('/tabs/cli.js')) return null;
+        // "In Datei speichern" komplett ersetzen: erst 'diff all', dann direkt
+        // Dialog + Schreiben im selben Kontext (kein simulierter Klick — der
+        // führte dazu, dass self.outputHistory leer war → 0-Byte-Dateien).
+        const needle = "$('.tab-cli .save').on('click', function () {";
+        if (!code.includes(needle)) {
+          this.warn('[android-cli] Save-Handler in tabs/cli.js nicht gefunden — Upstream geändert? Patch prüfen!');
+          return null;
+        }
+        const saveStart = code.indexOf(needle);
+        const saveEnd = code.indexOf("        $('.tab-cli .exit')", saveStart);
+        if (saveEnd === -1) {
+          this.warn('[android-cli] Ende des Save-Handlers nicht gefunden — Patch prüfen!');
+          return null;
+        }
+        const androidSave = `        $('.tab-cli .save').on('click', function () {
+            // [android] Ein-Knopf-Backup: 'diff all' ausführen, dann speichern
+            GUI.log('Collecting settings (diff all) ...');
+            self.outputHistory = "";
+            $('.tab-cli .window .wrapper').empty();
+            self.send(getCliCommand('diff all\\n', cliTab.cliBuffer));
+
+            var __last = -1, __stable = 0, __tries = 0;
+            var __timer = setInterval(function () {
+                __tries++;
+                var len = (self.outputHistory || "").length;
+                __stable = (len > 0 && len === __last) ? __stable + 1 : 0;
+                __last = len;
+
+                if (__stable < 2 && __tries < 40) return;
+                clearInterval(__timer);
+
+                var text = self.outputHistory || "";
+                if (!text.length) {
+                    GUI.log('Save failed: no CLI output received.');
+                    return;
+                }
+
+                var options = {
+                    defaultPath: generateFilename(FC.CONFIG, 'cli', 'txt'),
+                    filters: [
+                        { name: 'TXT', extensions: ['txt'] },
+                        { name: 'CLI', extensions: ['cli'] }
+                    ],
+                };
+                dialog.showSaveDialog(options).then(function (result) {
+                    if (result.canceled) {
+                        GUI.log(i18n.getMessage('cliSaveToFileAborted'));
+                        return;
+                    }
+                    window.electronAPI.writeFile(result.filePath, text).then(function (err) {
+                        if (err) {
+                            GUI.log(i18n.getMessage('ErrorWritingFile'));
+                            return console.error(err);
+                        }
+                        GUI.log(i18n.getMessage('FileSaved') + ' (' + text.length + ' bytes)');
+                    });
+                }).catch(function (err) {
+                    console.error('[android-cli] showSaveDialog:', err);
+                    GUI.log('Save failed.');
+                });
+            }, 700);
+        });
+`;
+
+        let out = code.slice(0, saveStart) + androidSave + code.slice(saveEnd);
+
+        // [android] Nach "Aus Datei laden": automatisch 'save' senden, sobald
+        // executeCommands() sein Promise auflöst (alle Befehle quittiert).
+        // Schlägt das fehl, klare Meldung im Log statt stillem Aufgeben —
+        // der Nutzer kann dann "Einstellungen speichern" manuell drücken.
+        const snippetNeedle = `                function executeSnippet() {
+                    const commands = previewArea.val();
+                    executeCommands(commands);
+                    self.GUI.snippetPreviewWindow.close();
+                }`;
+        if (!out.includes(snippetNeedle)) {
+          this.warn('[android-cli] executeSnippet nicht gefunden — Auto-Save nach Laden inaktiv. Upstream geändert? Patch prüfen!');
+          return out;
+        }
+        const snippetReplacement = `                function executeSnippet() {
+                    const commands = previewArea.val();
+                    var __savePending = setTimeout(function () {
+                        __savePending = null;
+                        GUI.log('Auto-save timed out - please press "Save settings" manually.');
+                    }, 60000);
+                    Promise.resolve(executeCommands(commands)).then(function () {
+                        if (!__savePending) return;
+                        clearTimeout(__savePending);
+                        __savePending = null;
+                        self.send(getCliCommand('save\\n', cliTab.cliBuffer));
+                        GUI.log('Settings applied and saved.');
+                    }).catch(function (e) {
+                        if (__savePending) { clearTimeout(__savePending); __savePending = null; }
+                        console.error('[android-cli] executeCommands:', e);
+                        GUI.log('Auto-save failed - please press "Save settings" manually.');
+                    });
+                    self.GUI.snippetPreviewWindow.close();
+                }`;
+        out = out.replace(snippetNeedle, snippetReplacement);
+        return out;
       },
     },
     // Lädt VOR allem anderen: jQuery-Global + electronAPI-Brücke.

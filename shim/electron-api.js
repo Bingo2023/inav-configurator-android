@@ -4,9 +4,11 @@
 // Mapping:
 //   listSerialDevices / serialConnect / serialSend / onSerialData / ...
 //       → natives Capacitor-Plugin "UsbSerial" (Android USB Host API)
+//   showSaveDialog / showOpenDialog / writeFile / readFile
+//       → natives Capacitor-Plugin "FileDialog" (Storage Access Framework)
 //   storeGet/Set/Delete → localStorage (synchron, wie das sendSync-Original)
-//   appGetLocale/Version/Path, Dialoge → Web-Äquivalente
-//   TCP/UDP (SITL), Kindprozesse, Datei-API → v1 nicht unterstützt (saubere Stubs)
+//   appGetLocale/Version/Path → Web-Äquivalente
+//   TCP/UDP (SITL), Kindprozesse, Firmware-Backup → nicht unterstützt (saubere Stubs)
 //
 // PFLEGEHINWEIS bei Upstream-Updates: js/main/preload.js im Submodule diffen —
 // neue Brücken-Funktionen hier ergänzen.
@@ -14,6 +16,7 @@
 import { registerPlugin } from '@capacitor/core';
 
 const UsbSerial = registerPlugin('UsbSerial');
+const FileDialog = registerPlugin('FileDialog');
 const STORE_PREFIX = 'inav-store:';
 
 /* ---------- Base64-Helfer (Binärdaten <-> natives Plugin) ---------- */
@@ -162,13 +165,39 @@ window.electronAPI = {
   appGetVersion: () => (typeof __INAV_VERSION__ !== 'undefined' ? __INAV_VERSION__ : '0.0.0'),
   appGetLocale: () => navigator.language || 'en',
 
-  /* --- Dialoge --- */
-  showOpenDialog: async () => notSupported('showOpenDialog', { canceled: true, filePaths: [] }),
-  showSaveDialog: async () => notSupported('showSaveDialog', { canceled: true, filePath: undefined }),
+  /* --- Datei-Dialoge (→ Android Storage Access Framework) --- */
+  // Vertrag lt. tabs/cli.js: { canceled, filePath } bzw. { canceled, filePaths: [] }.
+  // Als "Pfad" wird die content://-URI durchgereicht, die writeFile/readFile nutzen.
+  showSaveDialog: async (options = {}) => {
+    try {
+      const res = await FileDialog.showSaveDialog({ defaultName: options.defaultPath || 'inav-cli.txt' });
+      return res.canceled ? { canceled: true, filePath: undefined }
+                          : { canceled: false, filePath: res.uri };
+    } catch (e) {
+      console.error('[electronAPI-Shim] showSaveDialog:', e);
+      return { canceled: true, filePath: undefined };
+    }
+  },
+  showOpenDialog: async () => {
+    try {
+      const res = await FileDialog.showOpenDialog({});
+      return res.canceled ? { canceled: true, filePaths: [] }
+                          : { canceled: false, filePaths: res.uris };
+    } catch (e) {
+      console.error('[electronAPI-Shim] showOpenDialog:', e);
+      return { canceled: true, filePaths: [] };
+    }
+  },
   alertDialog: (message) => { window.alert(message); },
-  confirmDialog: (message) => window.confirm(message),
+  // Seit Upstream 9.1.1 asynchron (invoke statt sendSync) — Aufrufer erwarten ein Promise
+  confirmDialog: async (message) => window.confirm(message),
 
-  /* --- TCP/UDP (SITL) — v1 nicht unterstützt --- */
+  /* --- Firmware-Backup (seit 9.1.1; Flashen auf Android nicht unterstützt) --- */
+  getBackupDir: async () => notSupported('getBackupDir', '/'),
+  openBackupDir: async () => notSupported('openBackupDir', undefined),
+  listBackups: async () => notSupported('listBackups', []),
+
+  /* --- TCP/UDP (SITL) — nicht unterstützt --- */
   tcpConnect: async () => notSupported('tcpConnect', false),
   tcpClose: () => {},
   tcpSend: async () => notSupported('tcpSend', 0),
@@ -181,10 +210,28 @@ window.electronAPI = {
   onUdpError: (cb) => cb, offUdpError: () => {},
   onUdpMessage: (cb) => cb, offUdpMessage: () => {},
 
-  /* --- Datei-API — v1 nicht unterstützt (später: @capacitor/filesystem) --- */
-  writeFile: async (f) => { notSupported('writeFile'); throw new Error('writeFile not available on Android: ' + f); },
+  /* --- Datei-API (→ FileDialog-Plugin, content://-URIs) --- */
+  // Vertrag lt. tabs/cli.js: writeFile löst mit FALSY bei Erfolg auf
+  // (`.then(err => { if (err) ... })`); readFile liefert { error, data }.
+  writeFile: async (filename, data) => {
+    try {
+      await FileDialog.writeFile({ uri: filename, data: String(data) });
+      return null;
+    } catch (e) {
+      console.error('[electronAPI-Shim] writeFile:', e);
+      return String(e?.message || e);
+    }
+  },
+  readFile: async (filename) => {
+    try {
+      const { data } = await FileDialog.readFile({ uri: filename });
+      return { error: null, data };
+    } catch (e) {
+      console.error('[electronAPI-Shim] readFile:', e);
+      return { error: String(e?.message || e), data: null };
+    }
+  },
   appendFile: async (f) => { notSupported('appendFile'); throw new Error('appendFile not available on Android: ' + f); },
-  readFile: async (f) => { notSupported('readFile'); throw new Error('readFile not available on Android: ' + f); },
   rm: async () => notSupported('rm', undefined),
   chmod: async () => undefined,
 

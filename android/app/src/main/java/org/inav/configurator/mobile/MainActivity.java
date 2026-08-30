@@ -8,8 +8,9 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        // App-lokales Plugin registrieren (VOR super.onCreate)
+        // App-lokale Plugins registrieren (VOR super.onCreate)
         registerPlugin(UsbSerialPlugin.class);
+        registerPlugin(FileDialogPlugin.class);
         super.onCreate(savedInstanceState);
 
         // Desktop-UI auf kleinere Displays einpassen

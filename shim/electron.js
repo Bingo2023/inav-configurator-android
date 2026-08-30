@@ -1,7 +1,7 @@
 // Stub für `electron` / `@electron/remote` im WebView.
-// Ziel: Der Upstream-Code läuft, ohne zu crashen. Fenster-/Menü-Funktionen sind auf
-// Android bedeutungslos (No-Op); Datei-Dialoge werden auf Capacitor abgebildet, sobald
-// benötigt (Blackbox-Export etc.) — siehe TODO unten.
+// Fenster-/Menü-Funktionen sind auf Android bedeutungslos (No-Op);
+// Datei-Dialoge werden an window.electronAPI delegiert, damit die Logik
+// nur an EINER Stelle lebt (shim/electron-api.js → FileDialog-Plugin).
 
 const noop = () => {};
 const asyncNoop = () => Promise.resolve();
@@ -28,16 +28,16 @@ export const clipboard = {
 };
 
 export const app = {
-  getVersion: () => '0.0.0-android',
+  getVersion: () => (typeof __INAV_VERSION__ !== 'undefined' ? __INAV_VERSION__ : '0.0.0'),
   getPath: () => '/',
   getName: () => 'INAV Configurator',
   quit: noop,
 };
 
-// TODO: Für Blackbox-/Diff-Export auf @capacitor/filesystem + Share-Sheet mappen.
+// Delegiert an die Brücke → Android-Systemdialoge (Storage Access Framework)
 export const dialog = {
-  showOpenDialog: () => Promise.resolve({ canceled: true, filePaths: [] }),
-  showSaveDialog: () => Promise.resolve({ canceled: true, filePath: undefined }),
+  showOpenDialog: (...a) => window.electronAPI.showOpenDialog(...a),
+  showSaveDialog: (...a) => window.electronAPI.showSaveDialog(...a),
   showMessageBox: ({ message } = {}) => { if (message) alert(message); return Promise.resolve({ response: 0 }); },
 };
 
