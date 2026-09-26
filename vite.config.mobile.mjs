@@ -10,6 +10,7 @@
 //     entfernt (upstream gefixt), __INAV_WEB_VERSION__ definiert.
 // v7: Map Generator aktiv (ZIP-Export + Kachel-Cache im App-Speicher);
 //     nur der SD-Karten-Bereich und "Sync to SD Card" sind ausgeblendet.
+//     Terrain-ZIP mit DEFLATE statt ungepackt (.TER-Dateien: 25–40 MB je 1°-Feld).
 // v5: "Einstellungen speichern" wieder sichtbar; nach "Aus Datei laden" wird
 //     automatisch 'save' gesendet (mit Fehlermeldung bei Zeitüberschreitung).
 //
@@ -43,6 +44,17 @@ export default defineConfig({
       transform(code, id) {
         const file = id.replace(/\\/g, '/');
         const patches = [
+          {
+            // Map Generator, Terrain-ZIP: Upstream packt ohne Kompression (STORE).
+            // .TER-Blöcke nutzen nur 1151 von 2048 Byte, der Rest ist Null →
+            // DEFLATE schrumpft sie auf ca. 15 % (Flachland) bis 40 % (Gebirge).
+            // Spart Speicherplatz und senkt die RAM-Spitze auf dem Handy, weil das
+            // ZIP nicht mehr so groß ist wie alle .TER-Dateien zusammen. Level 1: 53 MB
+            // .TER → 17 MB in 1,7 s (Level 6: 15 MB, aber 2,5× langsamer).
+            file: '/tabs/map_generator.js',
+            find: "const blob = await zip.generateAsync({ type: 'arraybuffer' });\n            const result = await globalThis.electronAPI.showSaveDialog({\n                title: 'Save Terrain Files ZIP',",
+            replaceWith: "const blob = await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE', compressionOptions: { level: 1 } });\n            const result = await globalThis.electronAPI.showSaveDialog({\n                title: 'Save Terrain Files ZIP',",
+          },
           {
             // tab_switch_cleanup() wird u.a. in serial_backend.js OHNE callback
             // aufgerufen → callback() crasht, blockiert Tab-Wechsel & Disconnect.
