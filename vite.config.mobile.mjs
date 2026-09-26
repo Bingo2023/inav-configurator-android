@@ -63,7 +63,9 @@ export default defineConfig({
             insertAfter: "\n    if (typeof callback !== 'function') { callback = function () {}; }",
           },
         ];
-        let out = code;
+        // Windows-Checkouts (core.autocrlf) haben CRLF — mehrzeilige Suchmuster
+        // sind in LF geschrieben, daher vor dem Suchen normalisieren.
+        let out = code.includes('\r\n') ? code.replace(/\r\n/g, '\n') : code;
         let touched = false;
         for (const p of patches) {
           if (!file.endsWith(p.file)) continue;
@@ -99,6 +101,8 @@ export default defineConfig({
       },
       transform(code, id) {
         if (!id.replace(/\\/g, '/').endsWith('/tabs/cli.js')) return null;
+        // CRLF (Windows-Checkout) → LF, sonst greifen die mehrzeiligen Muster nicht
+        code = code.replace(/\r\n/g, '\n');
         // "In Datei speichern" komplett ersetzen: erst 'diff all', dann direkt
         // Dialog + Schreiben im selben Kontext (kein simulierter Klick — der
         // führte dazu, dass self.outputHistory leer war → 0-Byte-Dateien).
