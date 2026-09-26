@@ -8,6 +8,8 @@
 //       → natives Capacitor-Plugin "FileDialog" (Storage Access Framework)
 //   appGetPath('userData') + writeFile/readFile/rm/pathExists darunter
 //       → @capacitor/filesystem (privater App-Speicher; z.B. Map-Generator-Kachel-Cache)
+//   showOpenDialog({properties:['openDirectory']}) → Ordnerwahl (SAF-Tree); Pfade
+//       "<tree-URI>/a/b.TER" darunter → FileDialog.tree* (Map Generator "Sync to SD")
 //   storeGet/Set/Delete → localStorage (synchron, wie das sendSync-Original)
 //   appGetLocale/Version/Path → Web-Äquivalente
 //   TCP/UDP (SITL), Kindprozesse, Firmware-Backup → nicht unterstützt (saubere Stubs)
@@ -69,6 +71,26 @@ function mimeForSave(options) {
   const ext = String(options.defaultPath || '').split('.').pop().toLowerCase()
     || options.filters?.[0]?.extensions?.[0];
   return MIME_BY_EXT[ext] || MIME_BY_EXT[options.filters?.[0]?.extensions?.[0]] || 'application/octet-stream';
+}
+
+/* ---------- Ordnerzugriff (SAF-Tree) ---------- */
+// Eine Tree-URI enthält nach "/tree/" nur EIN Segment (Schrägstriche sind als %2F
+// kodiert) — alles dahinter ist der relative Pfad, den der Configurator anhängt.
+const TREE_RE = /^(content:\/\/[^/]+\/tree\/[^/]+)(?:\/(.*))?$/;
+function splitTree(p) {
+  if (typeof p !== 'string') return null;
+  const m = p.match(TREE_RE);
+  if (!m || (m[2] || '').startsWith('document/')) return null; // Dokument-URI, kein Ordnerpfad
+  return { tree: m[1], path: (m[2] || '').replace(/^\/+|\/+$/g, '') };
+}
+// Lesbare Anzeige statt roher URI: "primary:Download/INAV" → "Interner Speicher/Download/INAV"
+function displayTree(p) {
+  const t = splitTree(p);
+  if (!t) return p;
+  const id = decodeURIComponent(t.tree.split('/tree/')[1]);
+  const [vol, ...rest] = id.split(':');
+  const where = vol === 'primary' ? 'Interner Speicher' : `SD-Karte (${vol})`;
+  return [where, rest.join(':'), t.path].filter(Boolean).join('/');
 }
 
 /* ---------- Serial-Events: Plugin → registrierte Handler ---------- */
@@ -205,8 +227,13 @@ window.electronAPI = {
       return { canceled: true, filePath: undefined };
     }
   },
-  showOpenDialog: async () => {
+  showOpenDialog: async (options = {}) => {
     try {
+      if ((options.properties || []).includes('openDirectory')) {
+        const res = await FileDialog.pickDirectory();
+        return res.canceled ? { canceled: true, filePaths: [] }
+                            : { canceled: false, filePaths: [res.uri] };
+      }
       const res = await FileDialog.showOpenDialog({});
       return res.canceled ? { canceled: true, filePaths: [] }
                           : { canceled: false, filePaths: res.uris };
@@ -245,6 +272,26 @@ window.electronAPI = {
   writeFile: async (filename, data) => {
     try {
       const binary = typeof data !== 'string';
+      const t = splitTree(filename);
+      if (t) {
+        // Ordnerpfade (Map Generator → SD): Fehler WERFEN — der Aufrufer zählt
+        // Fehlschläge per catch und ignoriert Rückgabewerte.
+        const u8 = binary ? toUint8(data) : null;
+        if (!binary || u8.length <= WRITE_CHUNK) {
+          await FileDialog.treeWrite({ ...t, data: binary ? toBase64(u8) : data, ...(binary ? { encoding: 'base64' } : {}) });
+          return null;
+        }
+        const { uri } = await FileDialog.treeResolve(t);
+        const { id } = await FileDialog.openWrite({ uri });
+        try {
+          for (let off = 0; off < u8.length; off += WRITE_CHUNK) {
+            await FileDialog.writeChunk({ id, data: toBase64(u8.subarray(off, off + WRITE_CHUNK)) });
+          }
+        } finally {
+          await FileDialog.closeWrite({ id }).catch(() => {});
+        }
+        return null;
+      }
       if (isAppData(filename)) {
         await Filesystem.writeFile({
           path: appDataPath(filename),
@@ -274,6 +321,7 @@ window.electronAPI = {
       }
       return null;
     } catch (e) {
+      if (splitTree(filename)) throw e;
       if (!isAppData(filename)) console.error('[electronAPI-Shim] writeFile:', e);
       return String(e?.message || e);
     }
@@ -282,6 +330,13 @@ window.electronAPI = {
   readFile: async (filename, encoding = 'utf8') => {
     const binary = encoding === null;
     try {
+      const t = splitTree(filename);
+      if (t) {
+        const st = await FileDialog.treeStat(t);
+        if (!st.exists || st.isDir) return { error: 'not found: ' + filename, data: null };
+        const { data } = await FileDialog.readFile({ uri: st.uri, ...(binary ? { encoding: 'base64' } : {}) });
+        return { error: null, data: binary ? fromBase64(data) : data };
+      }
       if (isAppData(filename)) {
         const { data } = await Filesystem.readFile({
           path: appDataPath(filename),
@@ -294,12 +349,14 @@ window.electronAPI = {
       return { error: null, data: binary ? fromBase64(data) : data };
     } catch (e) {
       // Cache-Fehltreffer im App-Speicher sind normal → nicht loggen
-      if (!isAppData(filename)) console.error('[electronAPI-Shim] readFile:', e);
+      if (!isAppData(filename) && !splitTree(filename)) console.error('[electronAPI-Shim] readFile:', e);
       return { error: String(e?.message || e), data: null };
     }
   },
   appendFile: async (f) => { notSupported('appendFile'); throw new Error('appendFile not available on Android: ' + f); },
   rm: async (path) => {
+    const t = splitTree(path);
+    if (t) { if (t.path) await FileDialog.treeDelete(t).catch(() => {}); return undefined; }
     if (!isAppData(path)) return notSupported('rm', undefined);
     const target = { path: appDataPath(path), directory: Directory.Data };
     try {
@@ -312,11 +369,31 @@ window.electronAPI = {
   chmod: async () => undefined,
   // ab 10.0 (Map-Generator). SD-Karten-Direktsync ist auf Android ausgeblendet.
   pathExists: async (path) => {
+    const t = splitTree(path);
+    if (t) {
+      try { return (await FileDialog.treeStat(t)).exists; } catch { return false; }
+    }
     if (!isAppData(path)) return false;
     try { await Filesystem.stat({ path: appDataPath(path), directory: Directory.Data }); return true; }
     catch { return false; }
   },
   ejectDrive: async () => notSupported('ejectDrive', 'not supported on Android'),
+  // --- Android-Zusätze (nicht im Original-Preload; per Build-Patch genutzt) ---
+  // Dateigröße ohne die Datei zu lesen (-1 = existiert nicht). Map Generator prüft
+  // damit "schon vorhanden?" — sonst würde jede 30-MB-.TER komplett gelesen.
+  fileSize: async (path) => {
+    try {
+      const t = splitTree(path);
+      if (t) { const st = await FileDialog.treeStat(t); return st.exists && !st.isDir ? st.size : -1; }
+      if (isAppData(path)) {
+        const st = await Filesystem.stat({ path: appDataPath(path), directory: Directory.Data });
+        return st.type === 'file' ? st.size : -1;
+      }
+    } catch { /* existiert nicht */ }
+    return -1;
+  },
+  // Lesbarer Name für Ordner-URIs in der Oberfläche
+  displayPath: (p) => displayTree(p),
 
   /* --- Kindprozesse (SITL-Binary) — auf Android prinzipbedingt unmöglich --- */
   startChildProcess: () => notSupported('startChildProcess', undefined),

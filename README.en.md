@@ -16,7 +16,7 @@ submodule**. Connects to the flight controller via **USB OTG** (MSP over VCP/CP2
 | Settings restore: "Load from file" (saves automatically after transfer) | ✅ working |
 | Firmware flashing (DFU) | ❌ unsupported (separate USB protocol) → flash on a PC; tab hidden |
 | SITL / TCP / UDP | ❌ unsupported (stubs in place); tab hidden |
-| Map Generator (new in 10.0): map tiles for ETHOS/EdgeTX widgets and INAV terrain (`.TER`) | ✅ export as ZIP via the Android save dialog (terrain ZIP compressed: 53 MB of `.TER` → approx. 17 MB); tile cache in app storage. "Sync to SD Card" hidden |
+| Map Generator (new in 10.0): map tiles for ETHOS/EdgeTX widgets and INAV terrain (`.TER`) | ✅ export as ZIP via the Android save dialog (terrain ZIP compressed: 53 MB of `.TER` → approx. 17 MB) **or** "Sync to SD Card" straight into a folder picked via the Android folder dialog (e.g. the phone's SD card; permission is remembered); tile cache in app storage. "Eject" hidden |
 | Blackbox download | ❌ not wired up yet |
 
 **Version 10.0.0-rc1:** upstream `10.0.0-rc1` (release candidate). Builds and starts;
@@ -47,7 +47,7 @@ thin Electron layer is replaced. **No file in the upstream repo is modified.**
      `GUI.tab_switch_cleanup`). The former `appUpdater.js` patch was fixed
      upstream in 10.0 and has been removed.
    - `android-cli`: hides controls that make no sense on Android (`.msc`, `.copy`,
-     `.diffall`, the firmware flasher and SITL tabs, and the SD card section of the map generator), replaces the CLI save handler
+     `.diffall`, the firmware flasher and SITL tabs, and "Eject SD Card" in the map generator), replaces the CLI save handler
      with the one-tap backup, and adds an automatic `save` after "Load from file".
 
    If a patch no longer finds its code location, the build prints a warning.

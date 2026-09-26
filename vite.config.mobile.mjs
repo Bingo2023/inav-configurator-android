@@ -1,4 +1,4 @@
-// Mobile-Build des UNVERÄNDERTEN Upstream-Codes — Version 7.
+// Mobile-Build des UNVERÄNDERTEN Upstream-Codes — Version 8.
 //
 // v3: window.electronAPI-Brücke (shim/electron-api.js) wird als erstes Modul
 //     geladen; jQuery-Global über gebündeltes Pre-Script; App-Version aus dem
@@ -8,8 +8,9 @@
 //     zum Ein-Knopf-Backup (führt automatisch erst 'diff all' aus).
 // v6: Upstream 10.0: Build-Target es2022 (Top-Level-await), appUpdater-Patch
 //     entfernt (upstream gefixt), __INAV_WEB_VERSION__ definiert.
-// v7: Map Generator aktiv (ZIP-Export + Kachel-Cache im App-Speicher);
-//     nur der SD-Karten-Bereich und "Sync to SD Card" sind ausgeblendet.
+// v7: Map Generator aktiv (ZIP-Export + Kachel-Cache im App-Speicher).
+// v8: Map Generator "Sync to SD Card" über Android-Ordnerwahl (SAF-Tree);
+//     nur "Eject" ausgeblendet. Existenzprüfung per fileSize statt Komplett-Lesen.
 //     Terrain-ZIP mit DEFLATE statt ungepackt (.TER-Dateien: 25–40 MB je 1°-Feld).
 // v5: "Einstellungen speichern" wieder sichtbar; nach "Aus Datei laden" wird
 //     automatisch 'save' gesendet (mit Fehlermeldung bei Zeitüberschreitung).
@@ -56,6 +57,20 @@ export default defineConfig({
             replaceWith: "const blob = await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE', compressionOptions: { level: 1 } });\n            const result = await globalThis.electronAPI.showSaveDialog({\n                title: 'Save Terrain Files ZIP',",
           },
           {
+            // Map Generator: "existiert schon?" las bisher die GANZE Datei (bei .TER
+            // 25–40 MB über die JS-Brücke). Mit fileSize (Shim) nur die Größe abfragen.
+            file: '/tabs/map_generator.js',
+            find: "        const result = await globalThis.electronAPI.readFile(fullPath, null);\n        return result && !result.error && result.data && result.data.byteLength > 128;",
+            replaceWith: "        if (globalThis.electronAPI.fileSize) return (await globalThis.electronAPI.fileSize(fullPath)) > 128;\n        const result = await globalThis.electronAPI.readFile(fullPath, null);\n        return result && !result.error && result.data && result.data.byteLength > 128;",
+          },
+          {
+            // Map Generator: Ordner-URI (content://…/tree/…) lesbar anzeigen (3 Stellen)
+            file: '/tabs/map_generator.js',
+            find: '.text(sdPath)',
+            replaceWith: '.text((globalThis.electronAPI.displayPath || String)(sdPath))',
+            all: true,
+          },
+          {
             // tab_switch_cleanup() wird u.a. in serial_backend.js OHNE callback
             // aufgerufen → callback() crasht, blockiert Tab-Wechsel & Disconnect.
             file: '/js/gui.js',
@@ -75,7 +90,9 @@ export default defineConfig({
           }
           out = p.insertAfter !== undefined
             ? out.replace(p.find, p.find + p.insertAfter)
-            : out.replace(p.find, p.replaceWith);
+            : p.all
+              ? out.split(p.find).join(p.replaceWith)
+              : out.replace(p.find, p.replaceWith);
           touched = true;
         }
         return touched ? out : null;
@@ -92,9 +109,9 @@ export default defineConfig({
             children:
               '.tab-cli .msc, .tab-cli .copy, .tab-cli .diffall, ' +
               '#tabs .tab_firmware_flasher, #tabs .tab_sitl { display: none !important; } ' +
-              // Map Generator: nur ZIP-Export; SD-Karten-Direktsync braucht auf
-              // Android einen eigenen Ordnerzugriff (SAF-Tree) → ausgeblendet.
-              '.gui_box:has(#mapgen_link_sd), #mapgen_sync_btn { display: none !important; }',
+              // Map Generator: "Eject SD Card" gibt es auf Android nicht (Laufwerks-
+              // buchstaben); Ordnerwahl + "Sync to SD Card" laufen über SAF.
+              '#mapgen_eject_sd { display: none !important; }',
             injectTo: 'head',
           },
         ];
