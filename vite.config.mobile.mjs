@@ -1,4 +1,4 @@
-// Mobile-Build des UNVERÄNDERTEN Upstream-Codes — Version 4.
+// Mobile-Build des UNVERÄNDERTEN Upstream-Codes — Version 6.
 //
 // v3: window.electronAPI-Brücke (shim/electron-api.js) wird als erstes Modul
 //     geladen; jQuery-Global über gebündeltes Pre-Script; App-Version aus dem
@@ -6,6 +6,9 @@
 // v4: android-cli-Block — blendet auf Android nicht unterstützte Bedienelemente
 //     aus (CLI-Buttons, Firmware Flasher, SITL) und macht "In Datei speichern"
 //     zum Ein-Knopf-Backup (führt automatisch erst 'diff all' aus).
+// v6: Upstream 10.0: Build-Target es2022 (Top-Level-await), appUpdater-Patch
+//     entfernt (upstream gefixt), Map-Generator-Tab ausgeblendet,
+//     __INAV_WEB_VERSION__ definiert.
 // v5: "Einstellungen speichern" wieder sichtbar; nach "Aus Datei laden" wird
 //     automatisch 'save' gesendet (mit Fehlermeldung bei Zeitüberschreitung).
 //
@@ -46,13 +49,6 @@ export default defineConfig({
             find: 'GUI_control.prototype.tab_switch_cleanup = function (callback) {',
             insertAfter: "\n    if (typeof callback !== 'function') { callback = function () {}; }",
           },
-          {
-            // appGetVersion ist laut Preload SYNCHRON (sendSync), appUpdater ruft
-            // trotzdem .then() darauf auf (Upstream-Bug, crasht auch am Desktop).
-            file: '/js/appUpdater.js',
-            find: 'window.electronAPI.appGetVersion().then(',
-            replaceWith: 'Promise.resolve(window.electronAPI.appGetVersion()).then(',
-          },
         ];
         let out = code;
         let touched = false;
@@ -80,7 +76,7 @@ export default defineConfig({
             tag: 'style',
             children:
               '.tab-cli .msc, .tab-cli .copy, .tab-cli .diffall, ' +
-              '#tabs .tab_firmware_flasher, #tabs .tab_sitl { display: none !important; }',
+              '#tabs .tab_firmware_flasher, #tabs .tab_sitl, #tabs .tab_map_generator { display: none !important; }',
             injectTo: 'head',
           },
         ];
@@ -234,7 +230,8 @@ export default defineConfig({
   build: {
     outDir: path.resolve(here, 'dist-mobile'),
     emptyOutDir: true,
-    target: 'es2020',
+    // es2022: Upstream nutzt ab 10.0 Top-Level-await (js/browser-entry.js)
+    target: 'es2022',
     // wie Upstream (vite.main-renderer.config.js): alle importierten Assets
     // inline einbetten — macht relative Pfade im gebauten Zustand robust
     assetsInlineLimit: Number.MAX_SAFE_INTEGER,
@@ -279,5 +276,8 @@ export default defineConfig({
     'process.platform': JSON.stringify('android'),
     'process.env.NODE_ENV': JSON.stringify('production'),
     __INAV_VERSION__: JSON.stringify(upstreamPkg.version),
+    // ab 10.0: js/browser/platform.js (Web-Build) referenziert das ohne Fallback.
+    // Wird bei uns nicht ausgeführt (Shim setzt electronAPI vorher), aber mitgebündelt.
+    __INAV_WEB_VERSION__: JSON.stringify(upstreamPkg.version),
   },
 });

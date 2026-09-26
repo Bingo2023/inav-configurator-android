@@ -160,8 +160,8 @@ window.electronAPI = {
 
   /* --- App-Infos --- */
   appGetPath: () => '/',
-  // MUSS ein echter String sein (semver prüft typeof) — der eine .then()-Aufrufer
-  // (js/appUpdater.js, Upstream-Bug) wird per Build-Zeit-Patch versorgt.
+  // MUSS ein gültiger semver-String sein: ab 10.0 leitet js/data_storage.js
+  // daraus den akzeptierten Firmware-Bereich ab (Major X → >= X.0.0, < X+1.0.0).
   appGetVersion: () => (typeof __INAV_VERSION__ !== 'undefined' ? __INAV_VERSION__ : '0.0.0'),
   appGetLocale: () => navigator.language || 'en',
 
@@ -234,6 +234,9 @@ window.electronAPI = {
   appendFile: async (f) => { notSupported('appendFile'); throw new Error('appendFile not available on Android: ' + f); },
   rm: async () => notSupported('rm', undefined),
   chmod: async () => undefined,
+  // ab 10.0 (Map-Generator, SD-Karte) — auf Android nicht unterstützt
+  pathExists: async () => false,
+  ejectDrive: async () => notSupported('ejectDrive', 'not supported on Android'),
 
   /* --- Kindprozesse (SITL-Binary) — auf Android prinzipbedingt unmöglich --- */
   startChildProcess: () => notSupported('startChildProcess', undefined),

@@ -1,6 +1,6 @@
 {
   "name": "inav-configurator-android",
-  "version": "9.1.1",
+  "version": "10.0.0-rc1",
   "private": true,
   "description": "Android-Wrapper f\u00fcr den INAV Configurator (Upstream als Submodule, Shim statt Fork)",
   "license": "GPL-3.0",

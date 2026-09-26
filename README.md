@@ -16,7 +16,13 @@ einbindet. Verbindung zum Flight Controller per **USB-OTG** (MSP über VCP/CP210
 | Einstellungs-Restore: „Aus Datei laden" (speichert nach dem Übertragen automatisch) | ✅ funktioniert |
 | Firmware flashen (DFU) | ❌ nicht unterstützt (eigenes USB-Protokoll) → am PC flashen; Tab ausgeblendet |
 | SITL / TCP / UDP | ❌ nicht unterstützt (Stubs vorhanden); Tab ausgeblendet |
+| Map Generator (neu in 10.0, schreibt Kacheln aufs Dateisystem/SD-Karte) | ❌ nicht unterstützt; Tab ausgeblendet |
 | Blackbox-Download | ❌ noch nicht angebunden |
+
+**Version 10.0.0-rc1:** Upstream-Stand `10.0.0-rc1` (Release Candidate). Baut und startet;
+Test am Gerät mit FC steht noch aus. ⚠️ Ab 10.0 akzeptiert der Configurator **nur noch
+Flugcontroller mit INAV 10.x** (Bereich wird aus der App-Version abgeleitet) — für FCs mit
+INAV 9.x die App-Version 9.1.1 verwenden.
 
 Getestet mit INAV Configurator 9.1.1 auf Android, FC: TBS_LUCID_H7_WING_MINI (INAV 9.1.0)
 und MICOAIR743V2 (INAV 9.0.1). Der per „In Datei speichern" erzeugte Diff wurde
@@ -37,15 +43,17 @@ schmale Electron-Schicht wird ersetzt. **Keine Datei im Upstream-Repo wird verä
    Electron-Forge-Setup des Upstreams ist außerhalb von Forge nicht nutzbar).
    Enthält Aliase für Node-/Electron-Module → `shim/`, jQuery-Injektion,
    Asset-Inlining sowie **selbstüberwachende Build-Zeit-Patches**:
-   - `upstream-patches`: zwei Upstream-Bugs (ungeschütztes `callback()` in
-     `GUI.tab_switch_cleanup`; `.then()` auf dem synchronen `appGetVersion()`
-     in `appUpdater.js`).
+   - `upstream-patches`: ein Upstream-Bug (ungeschütztes `callback()` in
+     `GUI.tab_switch_cleanup`). Der frühere `appUpdater.js`-Patch ist seit 10.0
+     upstream behoben und entfernt.
    - `android-cli`: blendet auf Android sinnlose Bedienelemente aus
-     (`.msc`, `.copy`, `.diffall`, Firmware-Flasher- und SITL-Tab) und ersetzt
+     (`.msc`, `.copy`, `.diffall`, Firmware-Flasher-, SITL- und Map-Generator-Tab) und ersetzt
      den CLI-Save-Handler durch das Ein-Knopf-Backup; ergänzt nach „Aus Datei
      laden" ein automatisches `save`.
 
    Findet ein Patch seine Code-Stelle nicht mehr, warnt der Build.
+   Build-Target ist `es2022`, weil Upstream ab 10.0 Top-Level-`await` nutzt
+   (`js/browser-entry.js`).
 4. **`android-src/`** — native Capacitor-Plugins `UsbSerialPlugin.java`
    (USB Host API via [usb-serial-for-android](https://github.com/mik3y/usb-serial-for-android))
    und `FileDialogPlugin.java` (Storage Access Framework für Datei-Dialoge),
@@ -117,7 +125,9 @@ Die drei Stellen, an denen ein Update reiben kann:
 
 1. **Preload-Diff** (macht das Skript automatisch gegen den vorherigen Stand):
    neue/geänderte Brücken-Funktionen → `shim/electron-api.js` nachziehen.
-   (Beispiel 9.1.1: `confirmDialog` wurde asynchron, drei Backup-Funktionen kamen dazu.)
+   (Beispiel 9.1.1: `confirmDialog` wurde asynchron, drei Backup-Funktionen kamen dazu.
+   Beispiel 10.0: `pathExists` und `ejectDrive` kamen dazu.) Zusätzlich listet das Skript
+   alle `electronAPI.*`-Aufrufe im Renderer, die der Shim nicht kennt.
 2. **Build-Warnungen lesen**: `[upstream-patches] …` oder `[android-cli] …` mit
    „nicht gefunden" heißt, eine gepatchte Stelle ist umgezogen oder wurde upstream
    gefixt → Patch in `vite.config.mobile.mjs` prüfen, anpassen oder entfernen.

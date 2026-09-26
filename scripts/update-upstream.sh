@@ -36,6 +36,17 @@ grep -rn --include='*.js' --include='*.mjs' \
   | grep -v "js/main/" | sed 's/^/    /' || echo "    (keine Treffer außerhalb von js/main/ — gut)"
 
 echo ""
+echo "==> [PRÜFPUNKT 2b] electronAPI-Aufrufe im Renderer, die der Shim nicht kennt:"
+USED=$(grep -rhoE "electronAPI\.[a-zA-Z]+" inav-configurator/js inav-configurator/tabs --include='*.js' \
+  | grep -v "^inav-configurator/js/main/" | sed 's/electronAPI\.//' | sort -u)
+MISSING=""
+for fn in $USED; do
+  grep -qE "(^|[^a-zA-Z])$fn *:" shim/electron-api.js || MISSING="$MISSING $fn"
+done
+if [ -z "$MISSING" ]; then echo "    (alle abgedeckt)"; else echo "   $MISSING"
+  echo "    (bleScan/deviceSelected/dgramCreateSocket sind bekannt und unkritisch)"; fi
+
+echo ""
 echo "==> [PRÜFPUNKT 3] Mobile-Build (auf '[upstream-patches] ... nicht gefunden'-Warnungen achten!)"
 npm run build:mobile
 npx cap sync android
