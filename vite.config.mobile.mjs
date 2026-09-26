@@ -1,4 +1,4 @@
-// Mobile-Build des UNVERÄNDERTEN Upstream-Codes — Version 6.
+// Mobile-Build des UNVERÄNDERTEN Upstream-Codes — Version 7.
 //
 // v3: window.electronAPI-Brücke (shim/electron-api.js) wird als erstes Modul
 //     geladen; jQuery-Global über gebündeltes Pre-Script; App-Version aus dem
@@ -7,8 +7,9 @@
 //     aus (CLI-Buttons, Firmware Flasher, SITL) und macht "In Datei speichern"
 //     zum Ein-Knopf-Backup (führt automatisch erst 'diff all' aus).
 // v6: Upstream 10.0: Build-Target es2022 (Top-Level-await), appUpdater-Patch
-//     entfernt (upstream gefixt), Map-Generator-Tab ausgeblendet,
-//     __INAV_WEB_VERSION__ definiert.
+//     entfernt (upstream gefixt), __INAV_WEB_VERSION__ definiert.
+// v7: Map Generator aktiv (ZIP-Export + Kachel-Cache im App-Speicher);
+//     nur der SD-Karten-Bereich und "Sync to SD Card" sind ausgeblendet.
 // v5: "Einstellungen speichern" wieder sichtbar; nach "Aus Datei laden" wird
 //     automatisch 'save' gesendet (mit Fehlermeldung bei Zeitüberschreitung).
 //
@@ -76,7 +77,10 @@ export default defineConfig({
             tag: 'style',
             children:
               '.tab-cli .msc, .tab-cli .copy, .tab-cli .diffall, ' +
-              '#tabs .tab_firmware_flasher, #tabs .tab_sitl, #tabs .tab_map_generator { display: none !important; }',
+              '#tabs .tab_firmware_flasher, #tabs .tab_sitl { display: none !important; } ' +
+              // Map Generator: nur ZIP-Export; SD-Karten-Direktsync braucht auf
+              // Android einen eigenen Ordnerzugriff (SAF-Tree) → ausgeblendet.
+              '.gui_box:has(#mapgen_link_sd), #mapgen_sync_btn { display: none !important; }',
             injectTo: 'head',
           },
         ];

@@ -16,7 +16,7 @@ einbindet. Verbindung zum Flight Controller per **USB-OTG** (MSP über VCP/CP210
 | Einstellungs-Restore: „Aus Datei laden" (speichert nach dem Übertragen automatisch) | ✅ funktioniert |
 | Firmware flashen (DFU) | ❌ nicht unterstützt (eigenes USB-Protokoll) → am PC flashen; Tab ausgeblendet |
 | SITL / TCP / UDP | ❌ nicht unterstützt (Stubs vorhanden); Tab ausgeblendet |
-| Map Generator (neu in 10.0, schreibt Kacheln aufs Dateisystem/SD-Karte) | ❌ nicht unterstützt; Tab ausgeblendet |
+| Map Generator (neu in 10.0): Kartenkacheln für ETHOS/EdgeTX-Widgets und INAV-Terrain (`.TER`) | ✅ Export als ZIP über den Android-Speicherdialog; Kachel-Cache im App-Speicher. „Sync to SD Card“ ausgeblendet |
 | Blackbox-Download | ❌ noch nicht angebunden |
 
 **Version 10.0.0-rc1:** Upstream-Stand `10.0.0-rc1` (Release Candidate). Baut und startet;
@@ -47,7 +47,7 @@ schmale Electron-Schicht wird ersetzt. **Keine Datei im Upstream-Repo wird verä
      `GUI.tab_switch_cleanup`). Der frühere `appUpdater.js`-Patch ist seit 10.0
      upstream behoben und entfernt.
    - `android-cli`: blendet auf Android sinnlose Bedienelemente aus
-     (`.msc`, `.copy`, `.diffall`, Firmware-Flasher-, SITL- und Map-Generator-Tab) und ersetzt
+     (`.msc`, `.copy`, `.diffall`, Firmware-Flasher- und SITL-Tab, im Map Generator den SD-Karten-Bereich) und ersetzt
      den CLI-Save-Handler durch das Ein-Knopf-Backup; ergänzt nach „Aus Datei
      laden" ein automatisches `save`.
 

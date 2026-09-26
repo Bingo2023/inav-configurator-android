@@ -17,8 +17,13 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
+
+import android.util.Base64;
 
 /**
  * Datei-Dialoge über das Android Storage Access Framework (SAF).
@@ -26,16 +31,22 @@ import java.nio.charset.StandardCharsets;
  *   Android merkt sich den zuletzt benutzten Ordner automatisch — auch Cloud-Ziele).
  * - showOpenDialog: System-Dateiauswahl.
  * - writeFile/readFile: Text über die vom Dialog gelieferte content://-URI.
+ *   Mit encoding="base64" auch Binärdaten (z.B. ZIP aus dem Map Generator).
+ * - openWrite/writeChunk/closeWrite: große Binärdateien stückweise schreiben,
+ *   damit nicht die ganze Datei auf einmal durch die JS-Brücke muss.
  * Gegenstück im JS: shim/electron-api.js (showSaveDialog/showOpenDialog/writeFile/readFile).
  */
 @CapacitorPlugin(name = "FileDialog")
 public class FileDialogPlugin extends Plugin {
 
+    private final Map<Integer, OutputStream> openStreams = new HashMap<>();
+    private int nextStreamId = 1;
+
     @PluginMethod
     public void showSaveDialog(PluginCall call) {
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("text/plain");
+        intent.setType(call.getString("mimeType", "text/plain"));
         intent.putExtra(Intent.EXTRA_TITLE, call.getString("defaultName", "inav-cli.txt"));
         startActivityForResult(call, intent, "saveDialogResult");
     }
@@ -91,7 +102,11 @@ public class FileDialogPlugin extends Plugin {
         try (OutputStream os = getContext().getContentResolver()
                 .openOutputStream(Uri.parse(uriStr), "wt")) {
             if (os == null) throw new Exception("Could not open output stream");
-            os.write(content.getBytes(StandardCharsets.UTF_8));
+            if ("base64".equals(call.getString("encoding"))) {
+                os.write(Base64.decode(content, Base64.DEFAULT));
+            } else {
+                os.write(content.getBytes(StandardCharsets.UTF_8));
+            }
             os.flush();
             call.resolve();
         } catch (Exception e) {
@@ -108,6 +123,16 @@ public class FileDialogPlugin extends Plugin {
         }
         try (InputStream is = getContext().getContentResolver().openInputStream(Uri.parse(uriStr))) {
             if (is == null) throw new Exception("Could not open input stream");
+            if ("base64".equals(call.getString("encoding"))) {
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                byte[] bbuf = new byte[65536];
+                int r;
+                while ((r = is.read(bbuf)) > 0) bos.write(bbuf, 0, r);
+                JSObject bret = new JSObject();
+                bret.put("data", Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP));
+                call.resolve(bret);
+                return;
+            }
             StringBuilder sb = new StringBuilder();
             BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
             char[] buf = new char[8192];
@@ -118,6 +143,79 @@ public class FileDialogPlugin extends Plugin {
             call.resolve(ret);
         } catch (Exception e) {
             call.reject("Read failed: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void openWrite(PluginCall call) {
+        String uriStr = call.getString("uri");
+        if (uriStr == null) {
+            call.reject("Missing uri");
+            return;
+        }
+        try {
+            OutputStream os = getContext().getContentResolver().openOutputStream(Uri.parse(uriStr), "wt");
+            if (os == null) throw new Exception("Could not open output stream");
+            int id;
+            synchronized (openStreams) {
+                id = nextStreamId++;
+                openStreams.put(id, os);
+            }
+            JSObject ret = new JSObject();
+            ret.put("id", id);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Open failed: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void writeChunk(PluginCall call) {
+        Integer id = call.getInt("id");
+        OutputStream os;
+        synchronized (openStreams) {
+            os = id == null ? null : openStreams.get(id);
+        }
+        if (os == null) {
+            call.reject("Unknown stream");
+            return;
+        }
+        try {
+            os.write(Base64.decode(call.getString("data", ""), Base64.DEFAULT));
+            call.resolve();
+        } catch (Exception e) {
+            closeQuietly(id);
+            call.reject("Write failed: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void closeWrite(PluginCall call) {
+        Integer id = call.getInt("id");
+        OutputStream os;
+        synchronized (openStreams) {
+            os = id == null ? null : openStreams.remove(id);
+        }
+        if (os == null) {
+            call.reject("Unknown stream");
+            return;
+        }
+        try {
+            os.flush();
+            os.close();
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Close failed: " + e.getMessage());
+        }
+    }
+
+    private void closeQuietly(Integer id) {
+        OutputStream os;
+        synchronized (openStreams) {
+            os = openStreams.remove(id);
+        }
+        if (os != null) {
+            try { os.close(); } catch (Exception ignored) { }
         }
     }
 }
