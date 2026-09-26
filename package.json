@@ -5,7 +5,7 @@
   "description": "Android-Wrapper f\u00fcr den INAV Configurator (Upstream als Submodule, Shim statt Fork)",
   "license": "GPL-3.0",
   "scripts": {
-    "postinstall": "cd inav-configurator && npm install",
+    "postinstall": "cd inav-configurator && npm install --no-package-lock",
     "build:mobile": "vite build --config vite.config.mobile.mjs",
     "sync": "npm run build:mobile && cap sync android",
     "android": "npm run sync && cap open android",
