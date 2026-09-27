@@ -230,9 +230,27 @@ window.electronAPI = {
   showOpenDialog: async (options = {}) => {
     try {
       if ((options.properties || []).includes('openDirectory')) {
-        const res = await FileDialog.pickDirectory();
-        return res.canceled ? { canceled: true, filePaths: [] }
-                            : { canceled: false, filePaths: [res.uri] };
+        try {
+          const res = await FileDialog.pickDirectory();
+          console.info('[electronAPI-Shim] Ordnerwahl:', JSON.stringify(res));
+          if (res.canceled) return { canceled: true, filePaths: [] };
+          const st = await FileDialog.treeStat({ tree: res.uri, path: '' });
+          console.info('[electronAPI-Shim] Ordner-Prüfung:', JSON.stringify(st));
+          if (!st.exists) {
+            window.alert('Auf den gewählten Ordner kann nicht zugegriffen werden.\n\n' + res.uri +
+              (st.error ? '\n\n' + st.error : ''));
+            return { canceled: true, filePaths: [] };
+          }
+          if (res.persisted === false) {
+            window.alert('Hinweis: Android hat für diesen Ordner keine dauerhafte Berechtigung vergeben. ' +
+              'Er muss nach einem Neustart der App erneut gewählt werden.');
+          }
+          return { canceled: false, filePaths: [res.uri] };
+        } catch (e) {
+          console.error('[electronAPI-Shim] Ordnerwahl:', e);
+          window.alert('Ordnerwahl fehlgeschlagen: ' + (e?.message || e));
+          return { canceled: true, filePaths: [] };
+        }
       }
       const res = await FileDialog.showOpenDialog({});
       return res.canceled ? { canceled: true, filePaths: [] }
@@ -371,7 +389,11 @@ window.electronAPI = {
   pathExists: async (path) => {
     const t = splitTree(path);
     if (t) {
-      try { return (await FileDialog.treeStat(t)).exists; } catch { return false; }
+      try {
+        const st = await FileDialog.treeStat(t);
+        if (!st.exists && !t.path) console.warn('[electronAPI-Shim] Ordner nicht erreichbar:', t.tree, JSON.stringify(st));
+        return st.exists;
+      } catch (e) { console.warn('[electronAPI-Shim] treeStat:', e); return false; }
     }
     if (!isAppData(path)) return false;
     try { await Filesystem.stat({ path: appDataPath(path), directory: Directory.Data }); return true; }

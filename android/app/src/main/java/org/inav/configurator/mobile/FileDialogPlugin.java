@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.Set;
 
 import android.util.Base64;
+import android.util.Log;
 
 /**
  * Datei-Dialoge über das Android Storage Access Framework (SAF).
@@ -57,6 +58,7 @@ public class FileDialogPlugin extends Plugin {
     // Ordner-Cache: "<tree>|<parentDocId>|<name>" → docId; listedDirs: bereits gelistete Ordner
     private final Map<String, String> childCache = new HashMap<>();
     private final Set<String> listedDirs = new HashSet<>();
+    private static final String TAG = "InavFileDialog";
     private static final String FILE_MIME = "application/octet-stream"; // Dateiname bleibt exakt (.TER, FREESPAC.E)
 
     @PluginMethod
@@ -258,16 +260,22 @@ public class FileDialogPlugin extends Plugin {
             return;
         }
         Uri tree = data.getData();
+        // Nur die Rechte dauerhaft machen, die Android tatsächlich vergeben hat
+        int granted = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+        if (granted == 0) granted = Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
+        boolean persisted = false;
         try {
-            getContext().getContentResolver().takePersistableUriPermission(tree,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            getContext().getContentResolver().takePersistableUriPermission(tree, granted);
+            persisted = true;
         } catch (Exception e) {
-            call.reject("Keine dauerhafte Berechtigung für den Ordner: " + e.getMessage());
-            return;
+            // Weiter mit der Sitzungs-Berechtigung (gilt bis zum App-Neustart)
+            Log.w(TAG, "takePersistableUriPermission fehlgeschlagen für " + tree + " (flags=" + data.getFlags() + ")", e);
         }
+        Log.i(TAG, "pickDirectory: " + tree + " flags=" + data.getFlags() + " persisted=" + persisted);
         clearTreeCache(tree.toString());
         ret.put("canceled", false);
         ret.put("uri", tree.toString());
+        ret.put("persisted", persisted);
         call.resolve(ret);
     }
 
@@ -279,11 +287,9 @@ public class FileDialogPlugin extends Plugin {
         JSObject ret = new JSObject();
         try {
             Uri tree = Uri.parse(treeStr);
-            if (!hasPersistedPermission(tree)) {
-                ret.put("exists", false);
-                call.resolve(ret);
-                return;
-            }
+            // Fehlende Dauer-Berechtigung nur protokollieren — die Sitzungs-Berechtigung
+            // aus der Ordnerwahl reicht; ob der Zugriff klappt, entscheidet die Abfrage.
+            if (!hasPersistedPermission(tree)) Log.w(TAG, "treeStat: keine dauerhafte Berechtigung für " + tree);
             Uri doc = resolve(tree, call.getString("path", ""), false);
             if (doc == null) {
                 ret.put("exists", false);
@@ -293,6 +299,7 @@ public class FileDialogPlugin extends Plugin {
             ContentResolver cr = getContext().getContentResolver();
             try (Cursor c = cr.query(doc, new String[] { Document.COLUMN_SIZE, Document.COLUMN_MIME_TYPE }, null, null, null)) {
                 if (c == null || !c.moveToFirst()) {
+                    Log.w(TAG, "treeStat: Abfrage leer für " + doc);
                     clearTreeCache(treeStr); // veraltet (extern gelöscht?)
                     ret.put("exists", false);
                 } else {
@@ -304,7 +311,9 @@ public class FileDialogPlugin extends Plugin {
             }
             call.resolve(ret);
         } catch (Exception e) {
+            Log.w(TAG, "treeStat fehlgeschlagen für " + treeStr + " / " + call.getString("path", ""), e);
             ret.put("exists", false);
+            ret.put("error", String.valueOf(e.getMessage()));
             call.resolve(ret);
         }
     }
@@ -353,6 +362,7 @@ public class FileDialogPlugin extends Plugin {
                 clearTreeCache(treeStr);
             }
         }
+        Log.w(TAG, "treeWrite fehlgeschlagen: " + path, last);
         call.reject("Write failed: " + (last != null ? last.getMessage() : "unknown"));
     }
 
