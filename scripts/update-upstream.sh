@@ -54,4 +54,6 @@ npx cap sync android
 echo ""
 echo "==> Fertig. Nächste Schritte:"
 echo "    1. APK bauen & auf dem Gerät testen: cd android && ./gradlew assembleDebug"
-echo "    2. Submodule-Pin committen: git add inav-configurator && git commit -m 'chore: bump upstream to $REF'"
+echo "    2. Version in package.json setzen (versionName der APK folgt automatisch)"
+echo "       und versionCode in android/app/build.gradle erhöhen"
+echo "    3. Submodule-Pin committen: git add inav-configurator && git commit -m 'chore: bump upstream to $REF'"
