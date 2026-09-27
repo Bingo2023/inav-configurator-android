@@ -16,7 +16,13 @@ submodule**. Connects to the flight controller via **USB OTG** (MSP over VCP/CP2
 | Settings restore: "Load from file" (saves automatically after transfer) | ✅ working |
 | Firmware flashing (DFU) | ❌ unsupported (separate USB protocol) → flash on a PC; tab hidden |
 | SITL / TCP / UDP | ❌ unsupported (stubs in place); tab hidden |
+| Map Generator (new in 10.0): map tiles for ETHOS/EdgeTX widgets and INAV terrain (`.TER`) | ✅ export as ZIP via the Android save dialog (terrain ZIP compressed: 53 MB of `.TER` → approx. 17 MB) **or** "Sync to SD Card" straight into a folder picked via the Android folder dialog (e.g. the phone's SD card; permission is remembered); tile cache in app storage. "Eject" and "Export as ZIP" hidden; without a folder the terrain dialog saves via "Generate & Save" |
 | Blackbox download | ❌ not wired up yet |
+
+**Version 10.0.0-rc1:** upstream `10.0.0-rc1` (release candidate). Builds and starts;
+on-device testing with an FC is still pending. ⚠️ From 10.0 on, the configurator **only
+accepts flight controllers running INAV 10.x** (the range is derived from the app version) —
+use app version 9.1.1 for FCs on INAV 9.x.
 
 Tested with INAV Configurator 9.1.1 on Android, FC: TBS_LUCID_H7_WING_MINI (INAV 9.1.0)
 and MICOAIR743V2 (INAV 9.0.1). The diff produced by "Save to file" was compared
@@ -37,14 +43,16 @@ thin Electron layer is replaced. **No file in the upstream repo is modified.**
    Electron Forge setup cannot be used outside Forge). Contains aliases mapping
    Node/Electron modules → `shim/`, jQuery injection, asset inlining, plus
    **self-monitoring build-time patches**:
-   - `upstream-patches`: two upstream bugs (unguarded `callback()` in
-     `GUI.tab_switch_cleanup`; `.then()` on the synchronous `appGetVersion()`
-     in `appUpdater.js`).
+   - `upstream-patches`: one upstream bug (unguarded `callback()` in
+     `GUI.tab_switch_cleanup`). The former `appUpdater.js` patch was fixed
+     upstream in 10.0 and has been removed.
    - `android-cli`: hides controls that make no sense on Android (`.msc`, `.copy`,
-     `.diffall`, the firmware flasher and SITL tabs), replaces the CLI save handler
+     `.diffall`, the firmware flasher and SITL tabs, and "Eject SD Card" in the map generator), replaces the CLI save handler
      with the one-tap backup, and adds an automatic `save` after "Load from file".
 
    If a patch no longer finds its code location, the build prints a warning.
+   The build target is `es2022` because upstream uses top-level `await` from 10.0 on
+   (`js/browser-entry.js`).
 4. **`android-src/`** — native Capacitor plugins `UsbSerialPlugin.java`
    (USB Host API via [usb-serial-for-android](https://github.com/mik3y/usb-serial-for-android))
    and `FileDialogPlugin.java` (Storage Access Framework for file dialogs),
@@ -116,7 +124,8 @@ The three places where an update can cause friction:
 1. **Preload diff** (the script does this automatically against the previous state):
    new/changed bridge functions → update `shim/electron-api.js`.
    (Example from 9.1.1: `confirmDialog` became asynchronous, three backup functions
-   were added.)
+   were added. Example from 10.0: `pathExists` and `ejectDrive` were added.) The script
+   also lists every `electronAPI.*` call in the renderer that the shim does not know.
 2. **Read the build warnings**: `[upstream-patches] …` or `[android-cli] …` saying
    "not found" means a patched location moved or was fixed upstream → check, adapt or
    remove the patch in `vite.config.mobile.mjs`.

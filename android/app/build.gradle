@@ -1,5 +1,9 @@
 apply plugin: 'com.android.application'
 
+// App-Version = "version" aus der package.json des Wrappers (eine Quelle der Wahrheit).
+// versionCode bei jedem Release, das installiert werden soll, von Hand erhöhen.
+def wrapperVersion = new groovy.json.JsonSlurper().parse(file('../../package.json')).version
+
 android {
     namespace = "org.inav.configurator.mobile"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +11,8 @@ android {
         applicationId "org.inav.configurator.mobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 3
-        versionName "9.1.1"
+        versionCode 4
+        versionName wrapperVersion
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

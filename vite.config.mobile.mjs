@@ -1,4 +1,4 @@
-// Mobile-Build des UNVERÄNDERTEN Upstream-Codes — Version 4.
+// Mobile-Build des UNVERÄNDERTEN Upstream-Codes — Version 10.
 //
 // v3: window.electronAPI-Brücke (shim/electron-api.js) wird als erstes Modul
 //     geladen; jQuery-Global über gebündeltes Pre-Script; App-Version aus dem
@@ -6,6 +6,15 @@
 // v4: android-cli-Block — blendet auf Android nicht unterstützte Bedienelemente
 //     aus (CLI-Buttons, Firmware Flasher, SITL) und macht "In Datei speichern"
 //     zum Ein-Knopf-Backup (führt automatisch erst 'diff all' aus).
+// v6: Upstream 10.0: Build-Target es2022 (Top-Level-await), appUpdater-Patch
+//     entfernt (upstream gefixt), __INAV_WEB_VERSION__ definiert.
+// v7: Map Generator aktiv (ZIP-Export + Kachel-Cache im App-Speicher).
+// v8: Map Generator "Sync to SD Card" über Android-Ordnerwahl (SAF-Tree);
+//     nur "Eject" ausgeblendet. Existenzprüfung per fileSize statt Komplett-Lesen.
+// v9: Map Generator: Rechteck per Finger/Stift zeichnen (Touch-Display).
+// v10: Map Generator: "Export as ZIP" ausgeblendet; "Generate & Download ZIP"
+//      heißt "Generate & Save".
+//     Terrain-ZIP mit DEFLATE statt ungepackt (.TER-Dateien: 25–40 MB je 1°-Feld).
 // v5: "Einstellungen speichern" wieder sichtbar; nach "Aus Datei laden" wird
 //     automatisch 'save' gesendet (mit Fehlermeldung bei Zeitüberschreitung).
 //
@@ -22,6 +31,9 @@ import inject from '@rollup/plugin-inject';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const upstream = path.resolve(here, 'inav-configurator');
 const shim = (f) => path.resolve(here, 'shim', f);
+
+// Touch-Zeichnen im Map Generator (per upstream-patches eingefügt, s.u.)
+const TOUCH_DRAW_JS = "        // [android] Touch/Stift: Leaflet liefert f\u00fcr Finger keine mousedown/-move/-up,\n        // sondern verschiebt die Karte. Im Zeichenmodus Pointer-Ereignisse in der\n        // Capture-Phase abfangen (vor Leaflets Drag-Handler) und auf startDraw/\n        // moveDraw/endDraw umleiten. Maus bleibt beim Original-Weg.\n        const __touchDraw = (() => {\n            const el = map.getContainer();\n            let pid = null, prevTouchAction = '';\n            const isTouch = (ev) => ev.pointerType === 'touch' || ev.pointerType === 'pen';\n            const at = (ev) => map.mouseEventToLatLng(ev);\n            const stop = (ev) => { ev.preventDefault(); ev.stopImmediatePropagation(); };\n            function down(ev) {\n                if (!isTouch(ev) || !ev.isPrimary || pid !== null) return;\n                if (ev.target.closest && ev.target.closest('.leaflet-control')) return; // Zoom/Toolbar bedienbar lassen\n                stop(ev);\n                pid = ev.pointerId;\n                try { el.setPointerCapture(pid); } catch (_) { /* optional */ }\n                startDraw({ latlng: at(ev), originalEvent: { button: 0 } });\n            }\n            function move(ev) { if (ev.pointerId !== pid) return; stop(ev); moveDraw({ latlng: at(ev) }); }\n            function up(ev) { if (ev.pointerId !== pid) return; stop(ev); pid = null; endDraw({ latlng: at(ev) }); }\n            function cancel(ev) {\n                if (ev.pointerId !== pid) return;\n                pid = null;\n                if (drawRect) { map.removeLayer(drawRect); drawRect = null; }\n                isDrawing = false; drawStartLatLng = null; map.dragging.enable();\n            }\n            const evs = [['pointerdown', down], ['pointermove', move], ['pointerup', up], ['pointercancel', cancel]];\n            return {\n                on() {\n                    prevTouchAction = el.style.touchAction;\n                    el.style.touchAction = 'none'; // Browser soll nicht selbst scrollen/zoomen\n                    evs.forEach(([n, f]) => el.addEventListener(n, f, true));\n                },\n                off() {\n                    evs.forEach(([n, f]) => el.removeEventListener(n, f, true));\n                    el.style.touchAction = prevTouchAction;\n                    pid = null;\n                },\n            };\n        })();\n\n";
 
 const upstreamPkg = JSON.parse(readFileSync(path.join(upstream, 'package.json'), 'utf8'));
 
@@ -40,21 +52,60 @@ export default defineConfig({
         const file = id.replace(/\\/g, '/');
         const patches = [
           {
+            // Map Generator, Terrain-ZIP: Upstream packt ohne Kompression (STORE).
+            // .TER-Blöcke nutzen nur 1151 von 2048 Byte, der Rest ist Null →
+            // DEFLATE schrumpft sie auf ca. 15 % (Flachland) bis 40 % (Gebirge).
+            // Spart Speicherplatz und senkt die RAM-Spitze auf dem Handy, weil das
+            // ZIP nicht mehr so groß ist wie alle .TER-Dateien zusammen. Level 1: 53 MB
+            // .TER → 17 MB in 1,7 s (Level 6: 15 MB, aber 2,5× langsamer).
+            file: '/tabs/map_generator.js',
+            find: "const blob = await zip.generateAsync({ type: 'arraybuffer' });\n            const result = await globalThis.electronAPI.showSaveDialog({\n                title: 'Save Terrain Files ZIP',",
+            replaceWith: "const blob = await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE', compressionOptions: { level: 1 } });\n            const result = await globalThis.electronAPI.showSaveDialog({\n                title: 'Save Terrain Files ZIP',",
+          },
+          {
+            // Map Generator: "existiert schon?" las bisher die GANZE Datei (bei .TER
+            // 25–40 MB über die JS-Brücke). Mit fileSize (Shim) nur die Größe abfragen.
+            file: '/tabs/map_generator.js',
+            find: "        const result = await globalThis.electronAPI.readFile(fullPath, null);\n        return result && !result.error && result.data && result.data.byteLength > 128;",
+            replaceWith: "        if (globalThis.electronAPI.fileSize) return (await globalThis.electronAPI.fileSize(fullPath)) > 128;\n        const result = await globalThis.electronAPI.readFile(fullPath, null);\n        return result && !result.error && result.data && result.data.byteLength > 128;",
+          },
+          {
+            // Map Generator: Ordner-URI (content://…/tree/…) lesbar anzeigen (3 Stellen)
+            file: '/tabs/map_generator.js',
+            find: '.text(sdPath)',
+            replaceWith: '.text((globalThis.electronAPI.displayPath || String)(sdPath))',
+            all: true,
+          },
+          {
+            // Map Generator: Rechteck zeichnen per Finger/Stift (Touch-Display).
+            // Upstream hört nur auf Mausereignisse → auf Touch verschiebt sich die Karte.
+            file: '/tabs/map_generator.js',
+            find: "        function enableDrawMode() {\n            map.on('mousedown', startDraw);",
+            replaceWith: TOUCH_DRAW_JS + "        function enableDrawMode() {\n            __touchDraw.on();\n            map.on('mousedown', startDraw);",
+          },
+          {
+            file: '/tabs/map_generator.js',
+            find: "        function disableDrawMode() {\n            map.off('mousedown', startDraw);",
+            replaceWith: "        function disableDrawMode() {\n            __touchDraw.off();\n            map.off('mousedown', startDraw);",
+          },
+          {
+            // Map Generator: Terrain-Dialog ohne gewählten Ordner speichert über den
+            // Android-Speicherdialog — "Download" passt dort nicht.
+            file: '/tabs/map_generator.js',
+            find: "'Generate & Download ZIP'",
+            replaceWith: "'Generate & Save'",
+          },
+          {
             // tab_switch_cleanup() wird u.a. in serial_backend.js OHNE callback
             // aufgerufen → callback() crasht, blockiert Tab-Wechsel & Disconnect.
             file: '/js/gui.js',
             find: 'GUI_control.prototype.tab_switch_cleanup = function (callback) {',
             insertAfter: "\n    if (typeof callback !== 'function') { callback = function () {}; }",
           },
-          {
-            // appGetVersion ist laut Preload SYNCHRON (sendSync), appUpdater ruft
-            // trotzdem .then() darauf auf (Upstream-Bug, crasht auch am Desktop).
-            file: '/js/appUpdater.js',
-            find: 'window.electronAPI.appGetVersion().then(',
-            replaceWith: 'Promise.resolve(window.electronAPI.appGetVersion()).then(',
-          },
         ];
-        let out = code;
+        // Windows-Checkouts (core.autocrlf) haben CRLF — mehrzeilige Suchmuster
+        // sind in LF geschrieben, daher vor dem Suchen normalisieren.
+        let out = code.includes('\r\n') ? code.replace(/\r\n/g, '\n') : code;
         let touched = false;
         for (const p of patches) {
           if (!file.endsWith(p.file)) continue;
@@ -64,7 +115,9 @@ export default defineConfig({
           }
           out = p.insertAfter !== undefined
             ? out.replace(p.find, p.find + p.insertAfter)
-            : out.replace(p.find, p.replaceWith);
+            : p.all
+              ? out.split(p.find).join(p.replaceWith)
+              : out.replace(p.find, p.replaceWith);
           touched = true;
         }
         return touched ? out : null;
@@ -80,13 +133,21 @@ export default defineConfig({
             tag: 'style',
             children:
               '.tab-cli .msc, .tab-cli .copy, .tab-cli .diffall, ' +
-              '#tabs .tab_firmware_flasher, #tabs .tab_sitl { display: none !important; }',
+              '#tabs .tab_firmware_flasher, #tabs .tab_sitl { display: none !important; } ' +
+              // Map Generator: "Eject SD Card" gibt es auf Android nicht (Laufwerks-
+              // buchstaben); Ordnerwahl + "Sync to SD Card" laufen über SAF.
+              '#mapgen_eject_sd { display: none !important; } ' +
+              // Nur ein Ausgabeweg: "Sync to SD Card" (Ordnerwahl). Ohne gewählten
+              // Ordner speichert der Terrain-Dialog über "Generate & Save".
+              '#mapgen_zip_btn { display: none !important; }',
             injectTo: 'head',
           },
         ];
       },
       transform(code, id) {
         if (!id.replace(/\\/g, '/').endsWith('/tabs/cli.js')) return null;
+        // CRLF (Windows-Checkout) → LF, sonst greifen die mehrzeiligen Muster nicht
+        code = code.replace(/\r\n/g, '\n');
         // "In Datei speichern" komplett ersetzen: erst 'diff all', dann direkt
         // Dialog + Schreiben im selben Kontext (kein simulierter Klick — der
         // führte dazu, dass self.outputHistory leer war → 0-Byte-Dateien).
@@ -234,7 +295,8 @@ export default defineConfig({
   build: {
     outDir: path.resolve(here, 'dist-mobile'),
     emptyOutDir: true,
-    target: 'es2020',
+    // es2022: Upstream nutzt ab 10.0 Top-Level-await (js/browser-entry.js)
+    target: 'es2022',
     // wie Upstream (vite.main-renderer.config.js): alle importierten Assets
     // inline einbetten — macht relative Pfade im gebauten Zustand robust
     assetsInlineLimit: Number.MAX_SAFE_INTEGER,
@@ -279,5 +341,8 @@ export default defineConfig({
     'process.platform': JSON.stringify('android'),
     'process.env.NODE_ENV': JSON.stringify('production'),
     __INAV_VERSION__: JSON.stringify(upstreamPkg.version),
+    // ab 10.0: js/browser/platform.js (Web-Build) referenziert das ohne Fallback.
+    // Wird bei uns nicht ausgeführt (Shim setzt electronAPI vorher), aber mitgebündelt.
+    __INAV_WEB_VERSION__: JSON.stringify(upstreamPkg.version),
   },
 });
