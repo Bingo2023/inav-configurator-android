@@ -2,3 +2,7 @@ node_modules/
 dist-mobile/
 .DS_Store
 android/.idea/
+# Signaturschlüssel niemals einchecken
+*.jks
+*.keystore
+keystore.properties

@@ -19,8 +19,8 @@ einbindet. Verbindung zum Flight Controller per **USB-OTG** (MSP über VCP/CP210
 | Map Generator (neu in 10.0): Kartenkacheln für ETHOS/EdgeTX-Widgets und INAV-Terrain (`.TER`) | ✅ Export als ZIP über den Android-Speicherdialog (Terrain-ZIP komprimiert: 53 MB `.TER` → ca. 17 MB) **oder** „Sync to SD Card“ direkt in einen per Android-Ordnerdialog gewählten Ordner (z.B. SD-Karte im Handy; Berechtigung bleibt gespeichert); Kachel-Cache im App-Speicher. „Eject“ und „Export as ZIP“ ausgeblendet; ohne gewählten Ordner speichert der Terrain-Dialog über „Generate & Save“ |
 | Blackbox-Download | ❌ noch nicht angebunden |
 
-**Version 10.0.0-rc1:** Upstream-Stand `10.0.0-rc1` (Release Candidate). Baut und startet;
-Test am Gerät mit FC steht noch aus. ⚠️ Ab 10.0 akzeptiert der Configurator **nur noch
+**Version 10.0.0-rc1:** Upstream-Stand `10.0.0-rc1` (Release Candidate). Getestet auf
+Xiaomi Pad (Android 15) mit TBS_LUCID_H7_WING_MINI (INAV 10.0.0). ⚠️ Ab 10.0 akzeptiert der Configurator **nur noch
 Flugcontroller mit INAV 10.x** (Bereich wird aus der App-Version abgeleitet) — für FCs mit
 INAV 9.x die App-Version 9.1.1 verwenden.
 
@@ -138,6 +138,26 @@ Nach dem Test: Submodule-Pin committen (`git add inav-configurator && git commit
 ⚠️ Niemals `npm update`/`npm audit fix` **im Submodule-Ordner** ausführen — das
 verändert dessen `package.json`/`yarn.lock` und bricht das Prinzip „unveränderte
 Quelle". Falls doch passiert: `git -C inav-configurator restore package.json yarn.lock`.
+
+## Release bauen
+
+Releases werden mit einem festen Release-Schlüssel signiert (seit 10.0.0-rc1; davor
+Debug-Schlüssel wechselnder Rechner). Der Schlüssel liegt **nicht** im Repo.
+
+```powershell
+$env:INAV_KEYSTORE_PROPERTIES = 'D:\Android\keys\keystore.properties'
+npm run sync
+cd android; .\gradlew.bat assembleRelease
+# → android/app/build/outputs/apk/release/app-release.apk
+```
+
+`keystore.properties` enthält `storeFile`, `storePassword`, `keyAlias`, `keyPassword`.
+⚠️ Schlüsseldatei **und** Passwort sichern — ohne sie lässt sich kein Update mehr über
+installierte Versionen einspielen (Nutzer müssten deinstallieren).
+
+Vor dem Release: `version` in `package.json` setzen (wird zur APK-`versionName`) und
+`versionCode` in `android/app/build.gradle` erhöhen. Tag `v<version>`, GitHub-Release
+mit der APK als `INAV.Configurator.Android_<version>.apk`.
 
 ## Bekannte Eigenheiten
 
