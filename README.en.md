@@ -16,7 +16,7 @@ submodule**. Connects to the flight controller via **USB OTG** (MSP over VCP/CP2
 | Settings restore: "Load from file" (saves automatically after transfer) | ✅ working |
 | Firmware flashing (DFU) | ❌ unsupported (separate USB protocol) → flash on a PC; tab hidden |
 | SITL / TCP / UDP | ❌ unsupported (stubs in place); tab hidden |
-| Map Generator (new in 10.0): map tiles for ETHOS/EdgeTX widgets and INAV terrain (`.TER`) | ✅ export as ZIP via the Android save dialog (terrain ZIP compressed: 53 MB of `.TER` → approx. 17 MB) **or** "Sync to SD Card" straight into a folder picked via the Android folder dialog (e.g. the phone's SD card; permission is remembered); tile cache in app storage. "Eject" hidden |
+| Map Generator (new in 10.0): map tiles for ETHOS/EdgeTX widgets and INAV terrain (`.TER`) | ✅ export as ZIP via the Android save dialog (terrain ZIP compressed: 53 MB of `.TER` → approx. 17 MB) **or** "Sync to SD Card" straight into a folder picked via the Android folder dialog (e.g. the phone's SD card; permission is remembered); tile cache in app storage. "Eject" and "Export as ZIP" hidden; without a folder the terrain dialog saves via "Generate & Save" |
 | Blackbox download | ❌ not wired up yet |
 
 **Version 10.0.0-rc1:** upstream `10.0.0-rc1` (release candidate). Builds and starts;

@@ -16,7 +16,7 @@ einbindet. Verbindung zum Flight Controller per **USB-OTG** (MSP über VCP/CP210
 | Einstellungs-Restore: „Aus Datei laden" (speichert nach dem Übertragen automatisch) | ✅ funktioniert |
 | Firmware flashen (DFU) | ❌ nicht unterstützt (eigenes USB-Protokoll) → am PC flashen; Tab ausgeblendet |
 | SITL / TCP / UDP | ❌ nicht unterstützt (Stubs vorhanden); Tab ausgeblendet |
-| Map Generator (neu in 10.0): Kartenkacheln für ETHOS/EdgeTX-Widgets und INAV-Terrain (`.TER`) | ✅ Export als ZIP über den Android-Speicherdialog (Terrain-ZIP komprimiert: 53 MB `.TER` → ca. 17 MB) **oder** „Sync to SD Card“ direkt in einen per Android-Ordnerdialog gewählten Ordner (z.B. SD-Karte im Handy; Berechtigung bleibt gespeichert); Kachel-Cache im App-Speicher. „Eject“ ausgeblendet |
+| Map Generator (neu in 10.0): Kartenkacheln für ETHOS/EdgeTX-Widgets und INAV-Terrain (`.TER`) | ✅ Export als ZIP über den Android-Speicherdialog (Terrain-ZIP komprimiert: 53 MB `.TER` → ca. 17 MB) **oder** „Sync to SD Card“ direkt in einen per Android-Ordnerdialog gewählten Ordner (z.B. SD-Karte im Handy; Berechtigung bleibt gespeichert); Kachel-Cache im App-Speicher. „Eject“ und „Export as ZIP“ ausgeblendet; ohne gewählten Ordner speichert der Terrain-Dialog über „Generate & Save“ |
 | Blackbox-Download | ❌ noch nicht angebunden |
 
 **Version 10.0.0-rc1:** Upstream-Stand `10.0.0-rc1` (Release Candidate). Baut und startet;

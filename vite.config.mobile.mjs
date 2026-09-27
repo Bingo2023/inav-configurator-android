@@ -1,4 +1,4 @@
-// Mobile-Build des UNVERÄNDERTEN Upstream-Codes — Version 9.
+// Mobile-Build des UNVERÄNDERTEN Upstream-Codes — Version 10.
 //
 // v3: window.electronAPI-Brücke (shim/electron-api.js) wird als erstes Modul
 //     geladen; jQuery-Global über gebündeltes Pre-Script; App-Version aus dem
@@ -12,6 +12,8 @@
 // v8: Map Generator "Sync to SD Card" über Android-Ordnerwahl (SAF-Tree);
 //     nur "Eject" ausgeblendet. Existenzprüfung per fileSize statt Komplett-Lesen.
 // v9: Map Generator: Rechteck per Finger/Stift zeichnen (Touch-Display).
+// v10: Map Generator: "Export as ZIP" ausgeblendet; "Generate & Download ZIP"
+//      heißt "Generate & Save".
 //     Terrain-ZIP mit DEFLATE statt ungepackt (.TER-Dateien: 25–40 MB je 1°-Feld).
 // v5: "Einstellungen speichern" wieder sichtbar; nach "Aus Datei laden" wird
 //     automatisch 'save' gesendet (mit Fehlermeldung bei Zeitüberschreitung).
@@ -87,6 +89,13 @@ export default defineConfig({
             replaceWith: "        function disableDrawMode() {\n            __touchDraw.off();\n            map.off('mousedown', startDraw);",
           },
           {
+            // Map Generator: Terrain-Dialog ohne gewählten Ordner speichert über den
+            // Android-Speicherdialog — "Download" passt dort nicht.
+            file: '/tabs/map_generator.js',
+            find: "'Generate & Download ZIP'",
+            replaceWith: "'Generate & Save'",
+          },
+          {
             // tab_switch_cleanup() wird u.a. in serial_backend.js OHNE callback
             // aufgerufen → callback() crasht, blockiert Tab-Wechsel & Disconnect.
             file: '/js/gui.js',
@@ -127,7 +136,10 @@ export default defineConfig({
               '#tabs .tab_firmware_flasher, #tabs .tab_sitl { display: none !important; } ' +
               // Map Generator: "Eject SD Card" gibt es auf Android nicht (Laufwerks-
               // buchstaben); Ordnerwahl + "Sync to SD Card" laufen über SAF.
-              '#mapgen_eject_sd { display: none !important; }',
+              '#mapgen_eject_sd { display: none !important; } ' +
+              // Nur ein Ausgabeweg: "Sync to SD Card" (Ordnerwahl). Ohne gewählten
+              // Ordner speichert der Terrain-Dialog über "Generate & Save".
+              '#mapgen_zip_btn { display: none !important; }',
             injectTo: 'head',
           },
         ];
