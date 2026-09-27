@@ -19,8 +19,8 @@ submodule**. Connects to the flight controller via **USB OTG** (MSP over VCP/CP2
 | Map Generator (new in 10.0): map tiles for ETHOS/EdgeTX widgets and INAV terrain (`.TER`) | ✅ export as ZIP via the Android save dialog (terrain ZIP compressed: 53 MB of `.TER` → approx. 17 MB) **or** "Sync to SD Card" straight into a folder picked via the Android folder dialog (e.g. the phone's SD card; permission is remembered); tile cache in app storage. "Eject" and "Export as ZIP" hidden; without a folder the terrain dialog saves via "Generate & Save" |
 | Blackbox download | ❌ not wired up yet |
 
-**Version 10.0.0-rc1:** upstream `10.0.0-rc1` (release candidate). Builds and starts;
-on-device testing with an FC is still pending. ⚠️ From 10.0 on, the configurator **only
+**Version 10.0.0-rc1:** upstream `10.0.0-rc1` (release candidate). Tested on a
+Xiaomi Pad (Android 15) with TBS_LUCID_H7_WING_MINI (INAV 10.0.0). ⚠️ From 10.0 on, the configurator **only
 accepts flight controllers running INAV 10.x** (the range is derived from the app version) —
 use app version 9.1.1 for FCs on INAV 9.x.
 
@@ -137,6 +137,26 @@ After testing: commit the submodule pin (`git add inav-configurator && git commi
 ⚠️ Never run `npm update`/`npm audit fix` **inside the submodule folder** — it modifies
 its `package.json`/`yarn.lock` and breaks the "unmodified source" principle. If it
 happens anyway: `git -C inav-configurator restore package.json yarn.lock`.
+
+## Building a release
+
+Releases are signed with a fixed release key (since 10.0.0-rc1; before that, debug keys
+of changing machines). The key is **not** in the repo.
+
+```powershell
+$env:INAV_KEYSTORE_PROPERTIES = 'D:\Android\keys\keystore.properties'
+npm run sync
+cd android; .\gradlew.bat assembleRelease
+# → android/app/build/outputs/apk/release/app-release.apk
+```
+
+`keystore.properties` contains `storeFile`, `storePassword`, `keyAlias`, `keyPassword`.
+⚠️ Back up the key file **and** the password — without them no update can be installed
+over existing installs (users would have to uninstall).
+
+Before a release: set `version` in `package.json` (becomes the APK `versionName`) and
+bump `versionCode` in `android/app/build.gradle`. Tag `v<version>`, GitHub release with
+the APK as `INAV.Configurator.Android_<version>.apk`.
 
 ## Known quirks
 

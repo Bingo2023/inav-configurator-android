@@ -4,6 +4,15 @@ apply plugin: 'com.android.application'
 // versionCode bei jedem Release, das installiert werden soll, von Hand erhöhen.
 def wrapperVersion = new groovy.json.JsonSlurper().parse(file('../../package.json')).version
 
+// Release-Signatur: Schlüssel liegt NICHT im Repo. Pfad zu einer keystore.properties
+// (storeFile, storePassword, keyAlias, keyPassword) über die Umgebungsvariable
+// INAV_KEYSTORE_PROPERTIES. Ohne sie wird assembleRelease unsigniert gebaut.
+def keystoreProps = new Properties()
+def keystorePropsPath = System.getenv('INAV_KEYSTORE_PROPERTIES')
+if (keystorePropsPath && file(keystorePropsPath).exists()) {
+    file(keystorePropsPath).withInputStream { keystoreProps.load(it) }
+}
+
 android {
     namespace = "org.inav.configurator.mobile"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -20,8 +29,19 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (keystoreProps['storeFile']) {
+            release {
+                storeFile file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
+            if (keystoreProps['storeFile']) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
