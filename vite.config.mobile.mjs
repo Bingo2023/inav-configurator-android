@@ -1,4 +1,4 @@
-// Mobile-Build des UNVERÄNDERTEN Upstream-Codes — Version 8.
+// Mobile-Build des UNVERÄNDERTEN Upstream-Codes — Version 9.
 //
 // v3: window.electronAPI-Brücke (shim/electron-api.js) wird als erstes Modul
 //     geladen; jQuery-Global über gebündeltes Pre-Script; App-Version aus dem
@@ -11,6 +11,7 @@
 // v7: Map Generator aktiv (ZIP-Export + Kachel-Cache im App-Speicher).
 // v8: Map Generator "Sync to SD Card" über Android-Ordnerwahl (SAF-Tree);
 //     nur "Eject" ausgeblendet. Existenzprüfung per fileSize statt Komplett-Lesen.
+// v9: Map Generator: Rechteck per Finger/Stift zeichnen (Touch-Display).
 //     Terrain-ZIP mit DEFLATE statt ungepackt (.TER-Dateien: 25–40 MB je 1°-Feld).
 // v5: "Einstellungen speichern" wieder sichtbar; nach "Aus Datei laden" wird
 //     automatisch 'save' gesendet (mit Fehlermeldung bei Zeitüberschreitung).
@@ -28,6 +29,9 @@ import inject from '@rollup/plugin-inject';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const upstream = path.resolve(here, 'inav-configurator');
 const shim = (f) => path.resolve(here, 'shim', f);
+
+// Touch-Zeichnen im Map Generator (per upstream-patches eingefügt, s.u.)
+const TOUCH_DRAW_JS = "        // [android] Touch/Stift: Leaflet liefert f\u00fcr Finger keine mousedown/-move/-up,\n        // sondern verschiebt die Karte. Im Zeichenmodus Pointer-Ereignisse in der\n        // Capture-Phase abfangen (vor Leaflets Drag-Handler) und auf startDraw/\n        // moveDraw/endDraw umleiten. Maus bleibt beim Original-Weg.\n        const __touchDraw = (() => {\n            const el = map.getContainer();\n            let pid = null, prevTouchAction = '';\n            const isTouch = (ev) => ev.pointerType === 'touch' || ev.pointerType === 'pen';\n            const at = (ev) => map.mouseEventToLatLng(ev);\n            const stop = (ev) => { ev.preventDefault(); ev.stopImmediatePropagation(); };\n            function down(ev) {\n                if (!isTouch(ev) || !ev.isPrimary || pid !== null) return;\n                if (ev.target.closest && ev.target.closest('.leaflet-control')) return; // Zoom/Toolbar bedienbar lassen\n                stop(ev);\n                pid = ev.pointerId;\n                try { el.setPointerCapture(pid); } catch (_) { /* optional */ }\n                startDraw({ latlng: at(ev), originalEvent: { button: 0 } });\n            }\n            function move(ev) { if (ev.pointerId !== pid) return; stop(ev); moveDraw({ latlng: at(ev) }); }\n            function up(ev) { if (ev.pointerId !== pid) return; stop(ev); pid = null; endDraw({ latlng: at(ev) }); }\n            function cancel(ev) {\n                if (ev.pointerId !== pid) return;\n                pid = null;\n                if (drawRect) { map.removeLayer(drawRect); drawRect = null; }\n                isDrawing = false; drawStartLatLng = null; map.dragging.enable();\n            }\n            const evs = [['pointerdown', down], ['pointermove', move], ['pointerup', up], ['pointercancel', cancel]];\n            return {\n                on() {\n                    prevTouchAction = el.style.touchAction;\n                    el.style.touchAction = 'none'; // Browser soll nicht selbst scrollen/zoomen\n                    evs.forEach(([n, f]) => el.addEventListener(n, f, true));\n                },\n                off() {\n                    evs.forEach(([n, f]) => el.removeEventListener(n, f, true));\n                    el.style.touchAction = prevTouchAction;\n                    pid = null;\n                },\n            };\n        })();\n\n";
 
 const upstreamPkg = JSON.parse(readFileSync(path.join(upstream, 'package.json'), 'utf8'));
 
@@ -69,6 +73,18 @@ export default defineConfig({
             find: '.text(sdPath)',
             replaceWith: '.text((globalThis.electronAPI.displayPath || String)(sdPath))',
             all: true,
+          },
+          {
+            // Map Generator: Rechteck zeichnen per Finger/Stift (Touch-Display).
+            // Upstream hört nur auf Mausereignisse → auf Touch verschiebt sich die Karte.
+            file: '/tabs/map_generator.js',
+            find: "        function enableDrawMode() {\n            map.on('mousedown', startDraw);",
+            replaceWith: TOUCH_DRAW_JS + "        function enableDrawMode() {\n            __touchDraw.on();\n            map.on('mousedown', startDraw);",
+          },
+          {
+            file: '/tabs/map_generator.js',
+            find: "        function disableDrawMode() {\n            map.off('mousedown', startDraw);",
+            replaceWith: "        function disableDrawMode() {\n            __touchDraw.off();\n            map.off('mousedown', startDraw);",
           },
           {
             // tab_switch_cleanup() wird u.a. in serial_backend.js OHNE callback
